@@ -27,7 +27,8 @@ void debug_print(char *s, ...) {
 	}
 #else
 	// print it whole out to the log file
-	fprintf(fp,"%s",buffer);
+	fprintf(fp,"%s", buffer);
+//	fprintf(stderr, "%s", buffer);
 #endif
 }
 
