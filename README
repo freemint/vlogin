@@ -1,6 +1,5 @@
 Install
 -------
-
 Copy vlogin to any directory of your harddrive and create this line 
 in /etc/ttytab:
 console		"/path/to/vlogin"			vt52		on secure
@@ -8,31 +7,34 @@ console		"/path/to/vlogin"			vt52		on secure
 With "/path/to/vlogin" modified to where vlogin resides on your harddrive.
 Be sure this is the only line with console on the beginig. If there is 
 another one put hash mark in front of it.
+You can also start vlogin from mint.cnf, but threre is no respawning 
+in that case!
 
 In next step copy vlogin.conf to '/etc' and modify its entries to fit your
 system.
 
 For mouse support instal moose.xdd to your mint folder.
+Currently there are two binary incompatible versions of moose.xdd!
+If mouse don't respond correctly your moose is too old, in that case
+compile new one from current freemint cvs, or compile vlogin against
+older version of moose from cvs.
 
 Thats it, now reboot and enjoy!
 
 vlogin.conf example:
 //----------------------------------------------
-# sample vdi login config, this file belongs to /etc
+# sample vdi login config, this file belongs to /etc/
 
-# labels       paths
-"N.AES 2.0"    /c/gemsys/n_aes/n_aes030.sys
-"XaAes 0.970"  /c/gemsys/xaaes/xaaes.prg
-MyAES          /c/gemsys/myaes/myaes.prg
+# shell menu item		path to shell					arguments
+"XaAes 0.970"			/c/gemsys/xaaes/xaaes.prg	-fvideo 24
+"nAes"					/c/gemsys/n_aes/n_aes030.sys
+MyAES						/c/gemsys/myaes/myaes2.prg
 -
-sh             /bin/sh
-bash           /bin/bash
+"XaAes 0.990 (km)"	/c/xaaes.km/load.prg
+-
+sh							/bin/sh
+bash						/bin/bash
 //----------------------------------------------
 
 You can use any char in label or path string but for spaces, in that case
 string must be within quotes!
-Passing commad line parameters is currently unsupportd, so don't use 
-something like "xaaes -fvideo 26" 
-
-vlogin can be started from mint.cnf but respawning is not working then!
-Do not quit AES/shell when running vlogin from mint.cnf!
