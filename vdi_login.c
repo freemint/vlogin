@@ -36,6 +36,8 @@ void *BuildMenu();
 static char	*CleanLine(char *buffer);
 sList		*ReadConfig();
 
+short		vloginConfCorrupted = 0;
+
 
 sList *list = NULL;
 
@@ -51,6 +53,8 @@ int main()
 	 DEBUG("Starting init: ");
 	InitTinyAES();
 	 DEBUG("Ok\n");
+
+	// InfoDialog("Test of new multiline dialog", "Three rings for the Elven-kings under the sky,\nSeven for the Dwarf-lords in their halls of stone,\nNine for Mortal Men doomed to die,\nOne for the Dark Lord on his dark throne\nIn the Land of Mordor where the Shadows lie.", "Wow, that's good");
 
 	 DEBUG("Creating menu\n");
 	menuPtr = BuildMenu();
@@ -82,28 +86,33 @@ void *BuildMenu()
 	
 	if (!list)
 	{
-		sCommand *command;
 		char menuItem[] = "/bin/sh";
 
-		 DEBUG("Creating default menu: ");
+		vloginConfCorrupted = 1;
 
+		 DEBUG("Creating default menu: ");
 		list = CreateList();
 
-		command = malloc(sizeof(sCommand));
+		commands = malloc(sizeof(sCommand));
 				
-		command->menuItem = malloc(sizeof(menuItem));
-		strcpy(command->menuItem, menuItem);
+		commands->menuItem = malloc(sizeof(menuItem));
+		strcpy(commands->menuItem, menuItem);
 
-		command->command = malloc(sizeof(menuItem));
-		strcpy(command->command, menuItem);
+		commands->command = malloc(sizeof(menuItem));
+		strcpy(commands->command, menuItem);
+
+		commands->childargv = malloc(sizeof(char *) * 2);
+		commands->childargv[0] = menuItem;
+		commands->childargv[1] = NULL;
 
 		// set up defaults
-		PushBack(list, command);
+		PushBack(list, commands);
  		 DEBUG("Ok\n");
 
 		 DEBUG("Invalid vlogin.conf dialog: ");
+
 		// if there is no valid command in vlogin.conf
-		InfoDialog("vlogin.conf is invalid!", "using '/bin/sh'", "Ops");
+		InfoDialog("Alert", "File '/etc/vlogin.conf'\nis missing or invalid!\n \nusing '/bin/sh'", "Ops");
 		 DEBUG("Ok\n");
 	}
 
@@ -164,7 +173,7 @@ void *BuildLoginDialog(void *menuPtr)
 	AttachButton(dialogPtr, button0, BUTTON_CENTER + BUTTON_DEFAULT, "Login to");
 	AttachButton(dialogPtr, button1, BUTTON_CENTER, "R");
 	AttachButton(dialogPtr, button2, BUTTON_CENTER, "S");
-	AttachComboBox(dialogPtr, comboBox, list->itemCount > 1 ? COMBO_BOX_NORMAL : COMBO_BOX_DISABLED, menuPtr);
+	AttachComboBox(dialogPtr, comboBox, !vloginConfCorrupted ? COMBO_BOX_NORMAL : COMBO_BOX_DISABLED, menuPtr);
 	 DEBUG("Ok\n");
 
 	 DEBUG("DrawDialog: ");
@@ -215,7 +224,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			else
 			{
 			 DEBUG("Verify FAIL\n");
-				InfoDialog("User name or password you", "typed was incorrect!", "Ops");
+				InfoDialog("Alert", "User name or password you\ntyped was incorrect!", "Ops");
 		
 			 DEBUG("Verify INFO\n");
 				password[0] = 0;
@@ -244,7 +253,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			break;
 
 		case 9:
-			if (AlertDialog("Do you realy want to", "REBOOT?", "Yes", "No"))
+			if (1 == AlertDialog("Alert", "Do you realy want to\nREBOOT?", "Yes", "No"))
 			{
 	 			#ifdef DEBUG
 				 ExitDebug();
@@ -262,7 +271,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			break;
 
 		case 10:
-			if (AlertDialog("Do you realy want to", "SHUTDOWN?", "Yes", "No"))
+			if (1 == AlertDialog("Alert", "Do you realy want to\nSHUTDOWN?", "Yes", "No"))
 			{
 	 			#ifdef DEBUG
 				 ExitDebug();
@@ -449,6 +458,7 @@ sList *ReadConfig()
 				strcpy(commands->command, l_command);
 
 				argn++;
+
 				commands->childargv = malloc(sizeof(char *) * argn);
 				for (index = 0; index < argn; index ++)
 					commands->childargv[index] = l_childargv[index];
