@@ -1,7 +1,7 @@
 # setup crosscompile environment
 #
-include ~/projects/mint/freemint/CONFIGVARS
-CFLAGS += -I../../gemdev/lib/windom.mt/include $(GENERAL)
+# include ~/projects/mint/freemint/CONFIGVARS
+# CFLAGS += -I../../gemdev/lib/windom.mt/include $(GENERAL)
 
 CFLAGS += -ggdb -O0 -Wall
 # -m68020-60
