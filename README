@@ -12,6 +12,8 @@ another one put hash mark in front of it.
 In next step copy vlogin.conf to '/etc' and modify its entries to fit your
 system.
 
+For mouse support instal moose.xdd to your mint folder.
+
 Thats it, now reboot and enjoy!
 
 vlogin.conf example:
@@ -28,4 +30,6 @@ bash           /bin/bash
 //----------------------------------------------
 
 You can use any char in label or path string but for spaces, in that case
-string must be within commas!
+string must be within quotes!
+Passing commad line parameters is currently unsupportd, so don't use 
+something like "xaaes -fvideo 26" 

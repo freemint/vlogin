@@ -1,10 +1,10 @@
 * Make moving with dialog smarter
 * Parsing more info from path/command part of string
-(entry 'XaAes		/c/gemsys/xaaes/xaaes.prg' works but
-'XaAes		"/c/gemsys/xaaes/xaaes.prg -fvideo 26"'does not)
-and seting it as argument.
+  (entry 'XaAes		/c/gemsys/xaaes/xaaes.prg' works but
+  'XaAes		"/c/gemsys/xaaes/xaaes.prg -fvideo 26"'does not)
+  and seting it as argument.
 * Terminte vlogin correctly - It seams vlogin stays "alive" 
-after starting aes/shell.
+  after starting aes/shell.
 * Don't allow selecting separators in menu
 * finish img loading and create support for img buttons in tiny_aes
 * Support for bitmap as a background (jpeg/bmp/tiff)
