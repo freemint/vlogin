@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#define NF_DEBUG 0
+#include "debug.h"
+
+FILE *fp;
 
 void debug_print(char *s, ...) {
 	char buffer[1024];
@@ -30,11 +32,9 @@ void debug_print(char *s, ...) {
 }
 
 
-FILE *fp;
-
 void InitDebug(void) {
 #if defined(DEBUG)
-	fp = fopen("//c//vlogin.log", "w");
+	fp = fopen("/c/vlogin.log", "w");
 #endif
 }
 
