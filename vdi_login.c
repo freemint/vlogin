@@ -15,8 +15,6 @@
 #include "logon.h"
 #include "limits.h"
 //---------------------
-#include "libfsa/fsa.h"
-//---------------------
 #include "tiny_aes.h"
 #include "list.h"
 #include "debug.h"
