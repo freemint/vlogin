@@ -224,7 +224,8 @@ int Logon(struct passwd *user, char *rmthost, int preserve)
 		putenv(newEnvironment[i++]);
 
 	// execute user's shell
-	execl(shell->command, shell->command, NULL);
+//	execl(shell->command, shell->command, NULL);
+	execv(shell->command, shell->childargv);
 
 	return 0;
 }

@@ -8,7 +8,7 @@ typedef struct
 {
 	char *menuItem;
 	char *command;
-	char *argv;
+	char **childargv;
 } sCommand; 
 
 sCommand *shell;

@@ -113,8 +113,13 @@ void *BuildMenu()
 
 	for(i = 0; i < list->itemCount; i++)
 	{
+		int index;
+
 		 DEBUG(" item: %s\n command: %s\n", commands->menuItem, commands->command);
 		AttachMenuItem(menuPtr, (void *)commands->menuItem);
+
+		for (index = 0; commands->childargv[index]; index ++)
+			DEBUG("  Argument[%d]: %s\n", index, commands->childargv[index]);
 
 		element = (void *)element->next;
 		commands = element != 0 ? element->data : 0;
@@ -192,7 +197,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 
 			shell = element != 0 ? element->data : shell;
 
-			 DEBUG("Command: %s %s\n", shell->command, shell->argv);
+			 DEBUG("Command: %s\n", shell->command);
 			 DEBUG("ComboBox value: %d\n", GetMenuSelect(menuPtr));
 
 			InstallHandlers();
@@ -291,10 +296,8 @@ void BuildWelcomeString(char *string)
 
 		info[0] = Ssystem( 2, 0L, 0L);
 		sprintf(version, " %d.%d.%d%c", 
-		(int)(info[0]>>24)&0xFF,
-		(int)(info[0]>>16)&0xFF, 
-		(int)(info[0]>>8)&0xFF, 
-		(int)info[0]&0xFF); 
+		(int)(info[0]>>24)&0xFF, (int)(info[0]>>16)&0xFF, 
+		(int)(info[0]>>8)&0xFF, (int)info[0]&0xFF); 
 		strcat(string, version);
 	}
 }
@@ -355,9 +358,9 @@ sList *ReadConfig()
 	{
 		do
 		{
-			char l_menuItem[32];
+			char l_menuItem[256];
 			char l_command[256];
-			char l_argv[32];
+			char l_argv[256];
 
 			// get input line    
 			cleanLine = CleanLine(fgets(line, sizeof(line), file));
@@ -374,14 +377,17 @@ sList *ReadConfig()
 
 			if (token != NULL)
 			{
-				int inside = 0;
+				char *l_childargv[128];
+				int inside	= 0;
 				int tokenCount = 0;
 				int tokenIndex = 0;
-				int index;
+				int index		= 0;
+				int argn 		= 0;
 				
-				l_menuItem[0] = 0;
-				l_command[0]  = 0;
-				l_argv[0]     = 0;
+				l_menuItem[0]  = 0;
+				l_command[0]   = 0;
+				l_childargv[0] = 0; 
+				l_argv[0]      = 0;
 
 				for (index = 0; index < strlen(token); index++)
 				{
@@ -394,7 +400,17 @@ sList *ReadConfig()
 					if (!inside && (token[index] == kSpace || token[index] == kTab))
 					{
 						if (tokenIndex)
+						{
 							tokenCount ++;
+
+							if (tokenCount > 1)
+							{
+								char *argv = malloc(strlen(l_argv) + 1);
+								strcpy(argv, l_argv);
+
+								l_childargv[argn++] = argv;
+							}
+						}
 
 						tokenIndex = 0;
 					}
@@ -405,16 +421,25 @@ sList *ReadConfig()
 					}
 					else if (tokenCount == 1)
 					{
-						l_command[tokenIndex ++] = token[index];
-						l_command[tokenIndex] = 0;
+						l_command[tokenIndex] = l_argv[tokenIndex] = token[index];
+						tokenIndex ++;
+						l_command[tokenIndex] = l_argv[tokenIndex] = 0;
 					}
-					else if (tokenCount == 2)
+					else if (tokenCount >= 2)
 					{
 						l_argv[tokenIndex++] = token[index];
 						l_argv[tokenIndex] = 0;
 					}
 				}
-				
+
+				if (tokenCount)
+				{
+					char *argv = malloc(strlen(l_argv) + 1);
+					strcpy(argv, l_argv);
+					l_childargv[argn++] = argv;
+					l_childargv[argn++] = NULL;
+				}
+
 				commands = malloc(sizeof(sCommand));
 				
 				commands->menuItem = malloc(sizeof(l_menuItem));
@@ -423,8 +448,10 @@ sList *ReadConfig()
 				commands->command = malloc(sizeof(l_command));
 				strcpy(commands->command, l_command);
 
-				commands->argv = malloc(sizeof(l_argv));
-				strcpy(commands->argv, l_argv);
+				argn++;
+				commands->childargv = malloc(sizeof(char *) * argn);
+				for (index = 0; index < argn; index ++)
+					commands->childargv[index] = l_childargv[index];
 
 				PushBack(menuList, commands);
 
