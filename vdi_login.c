@@ -3,11 +3,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
-#include <utmp.h>
-#include <sys/stat.h>
 #include <malloc.h>
 #include <string.h>
-//---------------------
+
 #include "vdi_login.h"
 #include "environment.h"
 #include "signals.h"
@@ -30,16 +28,13 @@ char password[__LEN_PASSWORD__ + 1] = "";
 extern int EventLoop();
 
 void *BuildLoginDialog(void *menuPtr);
-void HandleLoginDialog(void *dialogPtr, void *menuPtr);
+void  HandleLoginDialog(void *dialogPtr, void *menuPtr);
 
+void  BuildWelcomeString(char *string);
 void *BuildMenu();
 
-static char *CleanLine(char *buffer);
-sList *ReadConfig();
-
-void BuildWelcomeString(char *string);
-
-void SystemReset();
+static char	*CleanLine(char *buffer);
+sList		*ReadConfig();
 
 
 sList *list = NULL;
@@ -64,7 +59,7 @@ int main()
 	dialogPtr = BuildLoginDialog(menuPtr);
 	HandleLoginDialog(dialogPtr, menuPtr);
 
-	 DEBUG("Exiting TAES");
+	 DEBUG("Exiting TAES, something wrong happend!");
 	ExitTinyAES();
 
 	#ifdef DEBUG
@@ -77,7 +72,7 @@ int main()
 void *BuildMenu()
 {
 	sElement *element;
-	sCommands *commands;
+	sCommand *commands;
 	void *menuPtr = CreateMenu();
 	int i;
 	
@@ -87,14 +82,14 @@ void *BuildMenu()
 	
 	if (!list)
 	{
-		sCommands *command;
+		sCommand *command;
 		char menuItem[] = "/bin/sh";
 
 		 DEBUG("Creating default menu: ");
 
 		list = CreateList();
 
-		command = malloc(sizeof(sCommands));
+		command = malloc(sizeof(sCommand));
 				
 		command->menuItem = malloc(sizeof(menuItem));
 		strcpy(command->menuItem, menuItem);
@@ -150,8 +145,6 @@ void *BuildLoginDialog(void *menuPtr)
 	dialogPtr = CreateDialog(window, TITLE);
 	 DEBUG("Ok\n");
 
-//	printf("create dialog\n");
-
 	 DEBUG("BuildWelcomeString\n");
 	BuildWelcomeString(string);
 	 DEBUG("Done\n");
@@ -199,7 +192,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 
 			shell = element != 0 ? element->data : shell;
 
-			 DEBUG("Command: %s\n", shell->command);
+			 DEBUG("Command: %s %s\n", shell->command, shell->argv);
 			 DEBUG("ComboBox value: %d\n", GetMenuSelect(menuPtr));
 
 			InstallHandlers();
@@ -210,7 +203,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			{
 				int i;
 	
-			 DEBUG("Verify OK\n");
+				 DEBUG("Verify OK\n");
 				for (i = 0; i < sizeof(password); i++)
 					password[i]=rand()%256;
 			}
@@ -227,19 +220,21 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 				HandleLoginDialog(dialogPtr, menuPtr);
 			}
 
+			DisposeDialog(dialogPtr);
+			 DEBUG("DisposeDialog()\n");
+			ExitTinyAES();
+			 DEBUG("ExitTinyAES()\n");
+
  			#ifdef DEBUG
 			 ExitDebug();
 			#endif
 
-			DisposeDialog(dialogPtr);
-			ExitTinyAES();
-
 			if (user)
 			{
 				Logon(user, rmthost, -1);
-				SystemReset();
 			}
 
+			fprintf(stderr, "Can't exec shell!");
 			exit(0);
 			break;
 
@@ -346,13 +341,11 @@ sList *ReadConfig()
 	char filename[] = "/etc/vlogin.conf";
 	char *token;
 	char *cleanLine;
-	char menuItem[32];
-	char command[256];
 	char line[1024];
 	
 	int lineCount = 0;
 
-	sCommands *commands;
+	sCommand *commands;
 	sList *menuList = CreateList();
 	sList *retVal = NULL;
 	
@@ -362,6 +355,10 @@ sList *ReadConfig()
 	{
 		do
 		{
+			char l_menuItem[32];
+			char l_command[256];
+			char l_argv[32];
+
 			// get input line    
 			cleanLine = CleanLine(fgets(line, sizeof(line), file));
 			
@@ -373,51 +370,61 @@ sList *ReadConfig()
 			if (cleanLine[0] == '#')  continue;
 
 			// get first token
-		      token = CleanLine(strtok(line, "=\n\r"));
+		     token = CleanLine(strtok(line, "=\n\r"));
 
 			if (token != NULL)
 			{
 				int inside = 0;
-				int com = 0;
-				int j = 0;
-				int i;
+				int tokenCount = 0;
+				int tokenIndex = 0;
+				int index;
 				
-				menuItem[0] = 0;
-				command[0] = 0;
+				l_menuItem[0] = 0;
+				l_command[0]  = 0;
+				l_argv[0]     = 0;
 
-				for (i = 0; i < strlen(token); i++)
+				for (index = 0; index < strlen(token); index++)
 				{
-					if (token[i] == kCommas)
+					if (token[index] == kCommas)
 					{
-						i++;
-						
-						inside ? inside-- : inside++;
+						inside ? inside-- : inside ++;
+						index ++;
 					}
 
-					if (!inside && (token[i] == kSpace || token[i] == kTab))
+					if (!inside && (token[index] == kSpace || token[index] == kTab))
 					{
-						com = 1;
-						j = 0;
+						if (tokenIndex)
+							tokenCount ++;
+
+						tokenIndex = 0;
 					}
-					else if (com != 1)
+					else if (tokenCount == 0)
 					{
-						menuItem[j++] = token[i];
-						menuItem[j] = 0;
+						l_menuItem[tokenIndex ++] = token[index];
+						l_menuItem[tokenIndex] = 0;
 					}
-					else
+					else if (tokenCount == 1)
 					{
-						command[j++] = token[i];
-						command[j] = 0;
+						l_command[tokenIndex ++] = token[index];
+						l_command[tokenIndex] = 0;
+					}
+					else if (tokenCount == 2)
+					{
+						l_argv[tokenIndex++] = token[index];
+						l_argv[tokenIndex] = 0;
 					}
 				}
 				
-				commands = malloc(sizeof(sCommands));
+				commands = malloc(sizeof(sCommand));
 				
-				commands->menuItem = malloc(sizeof(menuItem));
-				strcpy(commands->menuItem, menuItem);
+				commands->menuItem = malloc(sizeof(l_menuItem));
+				strcpy(commands->menuItem, l_menuItem);
 
-				commands->command = malloc(sizeof(command));
-				strcpy(commands->command, command);
+				commands->command = malloc(sizeof(l_command));
+				strcpy(commands->command, l_command);
+
+				commands->argv = malloc(sizeof(l_argv));
+				strcpy(commands->argv, l_argv);
 
 				PushBack(menuList, commands);
 
@@ -430,28 +437,4 @@ sList *ReadConfig()
 	fclose(file);
 	
 	return retVal;
-}
-
-void SystemReset()
-{
-	struct utmp *wtmpentry;
-
-	wtmpentry = (struct utmp *)malloc(sizeof(struct utmp));
-
-	if (wtmpentry)
-	{
-		wtmpentry->ut_type = USER_PROCESS;
-		wtmpentry->ut_user[0] = '\0';
-
-	      time(&(wtmpentry->ut_time));
-
-		sscanf(ttyname(0), "/dev/%s", wtmpentry->ut_line);
-	#if HAVE_UPDWTMP
-		updwtmp("/var/log/wtmp", wtmpentry);
-	#endif
-      	free(wtmpentry);
-	}
-
-	chown(ttyname(0), 0, 0);
-	chmod(ttyname(0), 0600);
 }
