@@ -1,0 +1,31 @@
+Install
+-------
+
+Copy vlogin to any directory of your harddrive and create this line 
+in /etc/ttytab:
+console		"/path/to/vlogin"			vt52		on secure
+
+With "/path/to/vlogin" modified to where vlogin resides on your harddrive.
+Be sure this is the only line with console on the beginig. If there is 
+another one put hash mark in front of it.
+
+In next step copy vlogin.conf to '/etc' and modify its entries to fit your
+system.
+
+Thats it, now reboot and enjoy!
+
+vlogin.conf example:
+//----------------------------------------------
+# sample vdi login config, this file belongs to /etc
+
+# labels       paths
+"N.AES 2.0"    /c/gemsys/n_aes/n_aes030.sys
+"XaAes 0.970"  /c/gemsys/xaaes/xaaes.prg
+MyAES          /c/gemsys/myaes/myaes.prg
+-
+sh             /bin/sh
+bash           /bin/bash
+//----------------------------------------------
+
+You can use any char in label or path string but for spaces, in that case
+string must be within commas!
