@@ -134,7 +134,7 @@ void *BuildLoginDialog(void *menuPtr)
 	void *dialogPtr;
 	char string[30] 	= WELCOME;
 	
-	sRect window		= {vdi_inf[0] / 2 - 160, vdi_inf[1] / 2 - 86, vdi_inf[0] / 2 + 160, vdi_inf[1] / 2 + 86};
+	sRect window		= {vdiInfo[0] / 2 - 160, vdiInfo[1] / 2 - 86, vdiInfo[0] / 2 + 160, vdiInfo[1] / 2 + 86};
 	sRect button0		= {16, 136, 92, 158};
 	sRect button1		= {256, 137, 276, 157};
 	sRect button2		= {284, 137, 304, 157};
@@ -223,7 +223,6 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 				password[0] = 0;
 		
 				RedrawElement(dialogPtr, 5);
-				ActivateDialog(dialogPtr);
 		
 				HandleLoginDialog(dialogPtr, menuPtr);
 			}
@@ -259,8 +258,6 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 				Shutdown(1);
 			}
 		
-			ActivateDialog(dialogPtr);
-		
 			HandleLoginDialog(dialogPtr, menuPtr);
 			break;
 
@@ -278,8 +275,6 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 
 				Shutdown(0);
 			}
-
-			ActivateDialog(dialogPtr);
 		
 			HandleLoginDialog(dialogPtr, menuPtr);
 			break;
@@ -426,7 +421,6 @@ sList *ReadConfig()
 
 				PushBack(menuList, commands);
 
-//				printf("item: %s\ncommand: %s\n", commands->menuItem, commands->command);
 				retVal = menuList;
 			}
 
