@@ -14,7 +14,6 @@
 #include "verify.h"
 #include "logon.h"
 #include "limits.h"
-//---------------------
 #include "tiny_aes.h"
 #include "list.h"
 #include "debug.h"
@@ -25,23 +24,10 @@ const char kTab    = '\t';
 const char kCommas = '"';
 
 
-// #define AES_RUN
-
-#ifdef AES_RUN
- sInfo info;
- sRect rect;
- sRect dest;
-#endif
-
 char username[__LEN_USERNAME__ + 1] = "";
 char password[__LEN_PASSWORD__ + 1] = "";
 
 extern int EventLoop();
-
-#ifdef AES_RUN
- extern void InitColors();
- extern void DrawDesktop();
-#endif
 
 void *BuildLoginDialog(void *menuPtr);
 void HandleLoginDialog(void *dialogPtr, void *menuPtr);
@@ -59,21 +45,6 @@ void SystemReset();
 sList *list = NULL;
 
 
-#ifdef AES_RUN
-void FakeInitTinyAES()
-{
-	handle = info.handle;
-
-	vdi_inf[0] = info.screen_size.w;
-	vdi_inf[1] = info.screen_size.h;
-	vdi_inf[2] = info.sc_bpp;
-
-	InitColors();
-	
-	DrawDesktop();
-}
-#endif
-
 int main()
 {
 	void *dialogPtr;
@@ -82,22 +53,10 @@ int main()
  	#ifdef DEBUG
 	 InitDebug();
 	#endif
-	#ifndef AES_RUN
-	  DEBUG("Starting init: ");
-	 InitTinyAES();
-	  DEBUG("Ok\n");
-	#endif
-	#ifdef AES_RUN
-	 info = FSA_Init(1);
+	 DEBUG("Starting init: ");
+	InitTinyAES();
+	 DEBUG("Ok\n");
 
-	 dest.w = rect.w = 640;
-	 dest.h = rect.h = 480;
-
- 	 FSA_CreatWindow(rect);
-	 dest = FSA_CenterImg(rect);
-	 FakeInitTinyAES();
-	#endif
-	
 	 DEBUG("Creating menu\n");
 	menuPtr = BuildMenu();
 
@@ -111,7 +70,8 @@ int main()
 	#ifdef DEBUG
 	 ExitDebug();
 	#endif
-	return -1;
+
+	return 0;
 }
 
 void *BuildMenu()
@@ -144,7 +104,7 @@ void *BuildMenu()
 
 		// set up defaults
 		PushBack(list, command);
-		 DEBUG("Ok\n");
+ 		 DEBUG("Ok\n");
 
 		 DEBUG("Invalid vlogin.conf dialog: ");
 		// if there is no valid command in vlogin.conf
@@ -158,7 +118,7 @@ void *BuildMenu()
 
 	for(i = 0; i < list->itemCount; i++)
 	{
-		 DEBUG(" item: %s\ncommand: %s\n", commands->menuItem, commands->command);
+		 DEBUG(" item: %s\n command: %s\n", commands->menuItem, commands->command);
 		AttachMenuItem(menuPtr, (void *)commands->menuItem);
 
 		element = (void *)element->next;
@@ -206,7 +166,7 @@ void *BuildLoginDialog(void *menuPtr)
 	AttachButton(dialogPtr, button0, BUTTON_CENTER + BUTTON_DEFAULT, "Login to");
 	AttachButton(dialogPtr, button1, BUTTON_CENTER, "R");
 	AttachButton(dialogPtr, button2, BUTTON_CENTER, "S");
-	AttachComboBox(dialogPtr, comboBox, menuPtr);
+	AttachComboBox(dialogPtr, comboBox, list->itemCount > 1 ? COMBO_BOX_NORMAL : COMBO_BOX_DISABLED, menuPtr);
 	 DEBUG("Ok\n");
 
 	 DEBUG("DrawDialog: ");
@@ -388,7 +348,7 @@ sList *ReadConfig()
 {
 	FILE *file;
 
-	char filename[] = "//etc//vlogin.conf";
+	char filename[] = "/etc/vlogin.conf";
 	char *token;
 	char *cleanLine;
 	char menuItem[32];
