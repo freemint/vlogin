@@ -9,7 +9,6 @@
 #include <sys/select.h>
 
 #include "tiny_aes.h"
-#include "list.h"
 #include "vdi_it.h"
 #include "debug.h"
 
@@ -17,7 +16,7 @@
 // #define MOUSE_VECTOR
 #define MOUSE_USE_MOOSE
 #define MOUSE_DEVICE_NAME "/dev/mouse"
-int mouseHandle = 0;
+
 
 #if defined(MOUSE_USE_MOOSE)
 # include "moose.h"
@@ -27,10 +26,8 @@ int mouseHandle = 0;
 // some initialization
 void  InitColors();
 
-
 void  InitMouseVector();
 void  RestoreMouseVector();
-
 
 // prototypes of elements drawing functions 
 void  DrawDesktop();
@@ -39,10 +36,11 @@ void  DrawString(void *dialogPtr, sRect string_xy, char *label);
 void  DrawEditField(void *dialog, sRect ef_xy, int flag, char *label);
 void  DrawComboBox(void *dialog, void *comboBox);
 void  DrawMenu(void *menu, sRect menuRect, short item);
+
 void  DrawShades(sRect *rect, short width, short bool);
 
+// helper functions
 void  PaintGradient(short handle, sRect xy, short *rgbB, short *rgbE);
-
 void  DrawCursor(short x, short y, short color);
 char  PtInRect(short x, short y, sRect rect);
 
@@ -66,15 +64,9 @@ void  HandleMenu(unsigned char asciiCode, unsigned char scanCode);
 void  SetActivNext(short isTab);
 void  SetActivPrev();
 
-
 // ----------------------------------------------------------------------
 // global variables
 // ----------------------------------------------------------------------
-
-sList *selectedWindow			= NULL;
-sGraficObject *selectedEditField	= NULL;
-sGraficObject *selectedObject 	= NULL;
-sGraficObject *activatedObject 	= NULL;
 
 short *colors;
 
@@ -85,8 +77,29 @@ short sixteenColors[6] 	= {12, 8, 0, 9, 0, 1};
 short applId;
 short currentComboBoxValue = 0;
 
+// list of opened dialogs
+sList *dialogList;
+
 // AES physical wk handle
 static short phandle = 0;
+
+int mouseHandle = 0;
+
+// standard GEM arrow
+static MFORM M_ARROW_MOUSE =
+{
+	0x0000, 0x0000, 0x0001, 0x0000, 0x0001,
+	{ // Mask data
+	0xC000, 0xE000, 0xF000, 0xF800,
+	0xFC00, 0xFE00, 0xFF00, 0xFF80,
+	0xFFC0, 0xFFE0, 0xFE00, 0xEF00,
+	0xCF00, 0x8780, 0x0780, 0x0380 },
+	{ // Cursor data
+	0x0000, 0x4000, 0x6000, 0x7000,
+	0x7800, 0x7C00, 0x7E00, 0x7F00,
+	0x7F80, 0x7C00, 0x6C00, 0x4600,
+	0x0600, 0x0300, 0x0300, 0x0000 }
+};
 
 
 void InitColors()
@@ -94,16 +107,16 @@ void InitColors()
 	short rgbB[3] = {600, 600, 800};
 	short rgbE[3] = {800, 900, 1000};
 
-	if (vdi_inf[2] == 1)
+	if (vdiInfo[2] == 1)
 		colors = &monoColors[0];
 
-	if (vdi_inf[2] == 2)
+	if (vdiInfo[2] == 2)
 		colors = &fourColors[0];
 
-	if (vdi_inf[2] > 2)
+	if (vdiInfo[2] > 2)
 		colors = &sixteenColors[0];
 
-	if(vdi_inf[2] >= 16)
+	if(vdiInfo[2] >= 16)
 	{
 		colors[1] = 221;
 		colors[2] = 221;
@@ -146,24 +159,6 @@ void RestoreMouseVector()
 #endif
 }
 
-/*
- * standard GEM arrow
- */
-static MFORM M_ARROW_MOUSE =
-{
-	0x0000, 0x0000, 0x0001, 0x0000, 0x0001,
-	{ /* Mask data */
-	0xC000, 0xE000, 0xF000, 0xF800,
-	0xFC00, 0xFE00, 0xFF00, 0xFF80,
-	0xFFC0, 0xFFE0, 0xFE00, 0xEF00,
-	0xCF00, 0x8780, 0x0780, 0x0380 },
-	{ /* Cursor data */
-	0x0000, 0x4000, 0x6000, 0x7000,
-	0x7800, 0x7C00, 0x7E00, 0x7F00,
-	0x7F80, 0x7C00, 0x6C00, 0x4600,
-	0x0600, 0x0300, 0x0300, 0x0000 }
-};
-
 void InitTinyAES()
 {
 	short vdi_init[11];
@@ -185,11 +180,9 @@ void InitTinyAES()
 		short junk;
 		phandle = graf_handle(&junk, &junk, &junk, &junk);
 #else
-
 		fprintf(stderr,"Do not start VDI login from AES!\n");
 		ExitTinyAES();
 		exit(-1);
-
 #endif
 	}
 	else
@@ -205,8 +198,8 @@ void InitTinyAES()
 		exit(-1);
 	}
 
-	vdi_inf[0] = garbage[0];
-	vdi_inf[1] = garbage[1];
+	vdiInfo[0] = garbage[0];
+	vdiInfo[1] = garbage[1];
 	
 	handle = phandle;
 	v_opnvwk(vdi_init, &handle, garbage);
@@ -224,7 +217,9 @@ void InitTinyAES()
 
 	vq_extnd(handle, 1, garbage);
 
-	vdi_inf[2] = garbage[4];
+	vdiInfo[2] = garbage[4];
+
+	dialogList = CreateList();
 
 	InitColors();
 	
@@ -256,26 +251,16 @@ void ExitTinyAES()
 
 short AlertDialog(char *stringOne, char *stringTwo, char *buttonOneString, char *buttonTwoString)
 {
-	sList *dialogPtr;
-	sElement *element;
-	sGraficObject *object;
-
-	void *activatedObjectBackup = activatedObject;
-	
-	short returnValue = -1;
-
-	sRect windowPositon 	= {vdi_inf[0] / 2 - 130, vdi_inf[1] / 2 - 65, vdi_inf[0] / 2 + 130, vdi_inf[1] / 2 + 65};
+	sRect windowPositon 	= {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
 	sRect buttonOnePosition 	= {62, 98, 122, 118};
 	sRect buttonTwoPosition 	= {138, 98, 198, 118};
 	sRect boxPosition 		= {16, 35, 244, 86};
 	sRect stringOnePositon 	= {24, 56, 0, 0};
 	sRect stringTwoPositon 	= {24, 76, 0, 0};
 
-	activatedObject = NULL;
+	sList *dialogPtr = (sList *)CreateDialog(windowPositon, "Alert");
 
-	dialogPtr = (sList *)CreateDialog(windowPositon, "Alert");
-	element = (sElement *)dialogPtr->first;
-	object = (sGraficObject *)element->data;
+	short returnValue = -1;
 
 	AttachBox(dialogPtr, boxPosition, NULL);
 	AttachString(dialogPtr, stringOnePositon, stringOne);
@@ -288,47 +273,29 @@ short AlertDialog(char *stringOne, char *stringTwo, char *buttonOneString, char 
 	returnValue = EventLoop();
 	DisposeDialog(dialogPtr);
 
-	activatedObject = activatedObjectBackup;
-
 	return returnValue == 5 ? 1: 0;
 }
 
 short InfoDialog(char *stringOne, char *stringTwo, char *buttonString)
 {
-	sList *dialogPtr;
-	sElement *element;
-	sGraficObject *object;
-
-	void *activatedObjectBackup = activatedObject;
-	
-	sRect windowPositon = {vdi_inf[0] / 2 - 130, vdi_inf[1] / 2 - 65, vdi_inf[0] / 2 + 130, vdi_inf[1] / 2 + 65};
+	sRect windowPositon = {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
 	sRect buttonPosition = {100, 98, 160, 118};
 	sRect boxPosition = {16, 35, 244, 86};
 	sRect stringOnePositon = {24, 56, 0, 0};
 	sRect stringTwoPositon = {24, 76, 0, 0};
 	
-	  DEBUG("InfoDialog 1\n");
-	activatedObject = NULL;
+	sList *dialogPtr = (sList *)CreateDialog(windowPositon, "Info");
 
-	dialogPtr = (sList *)CreateDialog(windowPositon, "Info");
-	element = (sElement *)dialogPtr->first;
-	object = (sGraficObject *)element->data;
-
-	  DEBUG("InfoDialog 2\n");
 	AttachBox(dialogPtr, boxPosition, NULL);
 	AttachString(dialogPtr, stringOnePositon, stringOne);
 	AttachString(dialogPtr, stringTwoPositon, stringTwo);
 	AttachButton(dialogPtr, buttonPosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonString);
 
-	  DEBUG("InfoDialog 3\n");
 	DrawDialog(dialogPtr);
-	  DEBUG("InfoDialog 4\n");
 
 	EventLoop();
-	  DEBUG("InfoDialog 5\n");
+
 	DisposeDialog(dialogPtr);
-	
-	activatedObject = activatedObjectBackup;
 
 	return 1;
 }
@@ -338,21 +305,43 @@ short InfoDialog(char *stringOne, char *stringTwo, char *buttonString)
 void ActivateDialog(void *dialog)
 {
 	sGraficObject *dialBody = (sGraficObject *)((sElement *)((sList *)dialog)->first)->data;
-	void *deselectedWindow = selectedWindow;
 
-	  DEBUG("ActivateDialog 1\n");
-	selectedWindow = dialog;
+	sElement	*element = (sElement *)dialogList->first;
+	sList	*deselectedDialog = ((sDialogObject *)element->data)->dialog;
 
-	  DEBUG("ActivateDialog 2\n");
-	if(deselectedWindow)
-		RedrawDialog(deselectedWindow);
+	  DEBUG("ActivateDialog1\n");
 
-	  DEBUG("ActivateDialog 3\n");
+	if (dialog != ((sDialogObject *)element->data)->dialog)
+	{
+		int i;
+	 	 DEBUG("ActivateDialog2\n");
+		for (i = 1; i < dialogList->itemCount; i++)
+		{
+			element = (sElement *)element->next;
+
+			if (dialog == ((sDialogObject *)element->data)->dialog)
+			{
+				void *selectedDialog = element->data;
+	 			 DEBUG("ActivateDialog3\n");
+
+				EraseIndex(dialogList, i);
+				PushFront(dialogList, selectedDialog);
+
+				break;
+			}
+		}
+	}
+	  DEBUG("ActivateDialog4\n");
+
+	if(deselectedDialog && deselectedDialog != dialog)
+		RedrawDialog(deselectedDialog);
+	  DEBUG("ActivateDialog5\n");
+
 	if (dialBody && !dialBody->info)
 		dialBody->info = FormSave(&dialBody->coordinates);
+	  DEBUG("ActivateDialog6\n");
 
-	  DEBUG("ActivateDialog 4\n");
-	RedrawDialog(selectedWindow);
+	RedrawDialog(((sDialogObject *)element->data)->dialog);
 	  DEBUG("ActivateDialog/\n");
 }
 
@@ -360,9 +349,10 @@ void ActivateEditField(void *dialog, void *currentObject)
 {
 	sElement		*element = (sElement *)((sList *)dialog)->first;
 	sGraficObject	*dialogObject = (sGraficObject *)element->data;
-	sGraficObject	*previousObject = (sGraficObject *)activatedObject;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
+	sGraficObject	*previousObject = topDialogObject->activatedObject;
 	
-	if (activatedObject)
+	if (previousObject)
 	{
 		if (previousObject->type == TA_COMBO_BOX)
 		{
@@ -391,7 +381,7 @@ void ActivateEditField(void *dialog, void *currentObject)
 	{
 		sGraficObject *activObject = ((sGraficObject *)currentObject);
 
-		activatedObject = currentObject;
+		topDialogObject->activatedObject = currentObject;
 
 		if (activObject->type == TA_COMBO_BOX)
 		{
@@ -434,7 +424,7 @@ void DisposeMenu(void *menu)
 	for (i = 0; i < menuPtr->itemCount; i++)
 	{
 		free(element->data);
-		EraseFirst(menuPtr);
+		EraseFront(menuPtr);
 		element = (void *)element->next;
 	}
 	
@@ -547,7 +537,7 @@ void AttachString(void *dialogPtr, sRect string_xy, char *label)
 	string  = malloc(sizeof(sGraficObject));
 	labelCopy  = malloc(strlen(label) + 1);
 
-	strcpy(title, label);
+	strcpy(labelCopy, label);
 
 	string->type = TA_STRING;
 	string->string = labelCopy;
@@ -580,9 +570,9 @@ void AttachButton(void *dialogPtr, sRect button_xy, int flag, char *label)
 
 void DrawDesktop()
 {
-	if (vdi_inf[2] == 1)
+	if (vdiInfo[2] == 1)
 	{
-		short desk[4] = {0, 0, vdi_inf[0], vdi_inf[1]};
+		short desk[4] = {0, 0, vdiInfo[0], vdiInfo[1]};
 	
 		vsf_color(handle, colors[0]);
 		vsf_style(handle, 4);
@@ -590,16 +580,16 @@ void DrawDesktop()
 		vr_recfl(handle, desk);
 		vsf_interior(handle, 1);
 	}
-	else if ((vdi_inf[2] >= 2) && (vdi_inf[2] <= 8))
+	else if ((vdiInfo[2] >= 2) && (vdiInfo[2] <= 8))
 	{
-		short desk[4] = {0, 0, vdi_inf[0], vdi_inf[1]};
+		short desk[4] = {0, 0, vdiInfo[0], vdiInfo[1]};
 	
 		vsf_color(handle, colors[0]);
 		vr_recfl(handle, desk);
 	}
-	else if (vdi_inf[2] >= 15)
+	else if (vdiInfo[2] >= 15)
 	{
-		sRect deskRect = {0, 0, vdi_inf[0], vdi_inf[1] + 1};
+		sRect deskRect = {0, 0, vdiInfo[0], vdiInfo[1] + 1};
 		short rgbE[3] = {100, 200, 500};
 		short rgbB[3] = {0, 0, 200};
 
@@ -612,8 +602,9 @@ void DrawDesktop()
 
 void DrawButton(void *dialogPtr, sRect button_xy, int flag, char *label, int type)
 {
+	sElement		*element = (sElement *)dialogList->first;
+	sList 		*selectedDialog = ((sDialogObject *)element->data)->dialog;
 	sList		*list = (sList *)dialogPtr;
-	sElement		*element;
 	sGraficObject	*object;
 
 	short rgbB[3];
@@ -643,7 +634,7 @@ void DrawButton(void *dialogPtr, sRect button_xy, int flag, char *label, int typ
 	}
 	else 
 	{
-		if (dialogPtr == selectedWindow && ((flag >> 3) & 1) != 1)
+		if (dialogPtr == selectedDialog && ((flag >> 3) & 1) != 1)
 		{
 			rgbB[0] = 600; rgbB[1] = 600; rgbB[2] = 800;
 			rgbE[0] = 800; rgbE[1] = 900; rgbE[2] = 1000;
@@ -679,7 +670,7 @@ void DrawButton(void *dialogPtr, sRect button_xy, int flag, char *label, int typ
 
 	vswr_mode(handle, MD_TRANS);
 
-	if (((dialogPtr != selectedWindow) && (type == TA_MOVER)) || (((flag >> 3) & 1) == 1))
+	if (((dialogPtr != selectedDialog) && (type == TA_MOVER)) || (((flag >> 3) & 1) == 1))
 		vst_color(handle, colors[3]);
 
 	if (labelLength != 0)
@@ -805,19 +796,16 @@ void DrawComboBox(void *dialog, void *comboBox)
 	switch (GetMenuFlag(((sGraficObject *)comboBox)->string))
 	{
 		case COMBO_BOX_NORMAL:
-			// printf("Normal\n");
 			DrawButton(dialog, buttonRect, BUTTON_CENTER, "", TA_BUTTON);
 			menuObject->info = NULL;
 			break;
 
 		case COMBO_BOX_SELECTED:
-			// printf("Selected\n");
 			DrawButton(dialog, buttonRect, BUTTON_CENTER + BUTTON_SELECTED, "", TA_BUTTON);
 			menuObject->info = NULL;
 			break;
 
 		case COMBO_BOX_DISABLED:
-			// printf("Disabled\n");
 			DrawButton(dialog, buttonRect, BUTTON_CENTER + BUTTON_DISABLED, "", TA_BUTTON);
 			menuObject->info = NULL;
 			break;
@@ -826,7 +814,6 @@ void DrawComboBox(void *dialog, void *comboBox)
 			{
 			sRect menuRect = {xy[0], xy[3] + 1, xy[2], xy[3] + 1 + 17 * (menuPtr->itemCount - 1)};
 
-			// printf("Activated\n");
 			DrawButton(dialog, buttonRect, BUTTON_CENTER + BUTTON_SELECTED, "", TA_BUTTON);
 
 			if (menuPtr)
@@ -943,46 +930,58 @@ void DrawShades(sRect *rect, short width, short bool)
 
 void *CreateDialog(sRect dial_xy, char *label)
 {
-	sList *list;
-	char  *labelCopy;
+	char			*labelCopy;
+	sList		*objectList	= CreateList();
 
-	sGraficObject *dialog = malloc(sizeof(sGraficObject));
-	sGraficObject *mover = malloc(sizeof(sGraficObject));
+	sDialogObject	*dialogObject	= malloc(sizeof(sDialogObject));
+	sGraficObject	*dialogBody	= malloc(sizeof(sGraficObject));
+	sGraficObject	*dialogMover	= malloc(sizeof(sGraficObject));
 	
-	list = CreateList();
-	if (list == 0) return NULL;
+	if (!objectList) return NULL;
 	
 	labelCopy = malloc(strlen(label) + 1);
 	strcpy(labelCopy, label);
 
 	v_hide_c(handle);
 
-	dialog->type = TA_DIALOG;
-	dialog->string = NULL;
-	dialog->coordinates = dial_xy;
-	dialog->info = NULL;
-//	dialog->info = FormSave(&dialog->coordinates);
+	dialogBody->type = TA_DIALOG;
+	dialogBody->string = NULL;
+	dialogBody->coordinates = dial_xy;
+	dialogBody->info = NULL;
 
 	v_show_c(handle, 0);
 
 	dial_xy.x = 2;
 	dial_xy.y = 2;
-	dial_xy.w-= dialog->coordinates.x + 2;
+	dial_xy.w-= dialogBody->coordinates.x + 2;
 	dial_xy.h = dial_xy.y + 21;
 
-	mover->type = TA_MOVER;
-	mover->info = (void *)BUTTON_LEFT;
-	mover->string = label;
-	mover->coordinates = dial_xy;
+	dialogMover->type = TA_MOVER;
+	dialogMover->info = (void *)BUTTON_LEFT;
+	dialogMover->string = label;
+	dialogMover->coordinates = dial_xy;
 
-	PushBack(list, (void *)dialog);
-	PushBack(list, (void *)mover);
+	PushBack(objectList, (void *)dialogBody);
+	PushBack(objectList, (void *)dialogMover);
 
-	return (void *)list;
+	dialogObject->dialog = objectList;
+	dialogObject->selectedEditField	= NULL;
+	dialogObject->selectedObject		= NULL;
+	dialogObject->activatedObject		= NULL;
+
+	 DEBUG("CD::dialogs: %d\n", dialogList->itemCount);
+
+	PushBack(dialogList, dialogObject);
+
+	 DEBUG("CD::dialogs: %d\n", dialogList->itemCount);
+
+	return (void *)objectList;
 }
 
 void DrawDialog(void *dialog)
 {
+	 DEBUG("DD::dialogId: %d\n", (int)dialog);
+
 	ActivateDialog(dialog);
 }
 
@@ -990,12 +989,16 @@ void RedrawDialog(void *dialog)
 {
 	sElement 		*element = (sElement *)((sList *)dialog)->first;
 	sGraficObject 	*object = (sGraficObject *)element->data;
-	sRect 		dialRect;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 
+	sRect 		dialRect;
 	int 			i;
+
+	DEBUG("RedrawDialog\n");
 
 	for (i = 0; i < ((sList *)dialog)->itemCount; i++)
 	{
+		DEBUG("Item: %d\n", i);
 		switch (object->type)
 		{
 			case TA_DIALOG: // dialog
@@ -1026,9 +1029,15 @@ void RedrawDialog(void *dialog)
 			case TA_EDIT_FIELD: // edit field
 				DrawEditField(dialog, object->coordinates, (int)object->info, object->string);
 
-				if (!activatedObject)
-					ActivateEditField(dialog, object);
-			
+				if (topDialogObject->dialog == dialog)
+				{
+					if (!topDialogObject->activatedObject)
+						ActivateEditField(dialog, object);
+					else if (topDialogObject->activatedObject == object)
+						ActivateEditField(dialog, object);
+
+				}
+				
 				break;
 			case TA_COMBO_BOX:
 				DrawComboBox(dialog, object);
@@ -1042,8 +1051,8 @@ void RedrawDialog(void *dialog)
 
 void DisposeDialog(void *dialog)
 {
-	sElement *element = (sElement *)((sList *)dialog)->first;
-	sGraficObject *object = (sGraficObject *)element->data;
+	sElement 		*element = (sElement *)((sList *)dialog)->first;
+	sGraficObject 	*object = (sGraficObject *)element->data;
 
 	int i;
 
@@ -1061,38 +1070,68 @@ void DisposeDialog(void *dialog)
 
 		free(object);
 
-		EraseFirst(dialog);
+		EraseFront(dialog);
 
 		element = (sElement *)((sList *)dialog)->first;
 		object = element ? (sGraficObject *)element->data : 0;
 	}
 	
-	if (dialog == selectedWindow)
-		selectedWindow = 0;
+	element = (sElement *)dialogList->first;
+
+	 DEBUG("Dialog is beeing deleted\n");
+	if (dialog == ((sDialogObject *)element->data)->dialog)
+	{
+		free(element->data);
+		EraseFront(dialogList);
+		 DEBUG(" index 0\n");
+
+		element = (sElement *)dialogList->first;
+		if (element)
+		{
+			 DEBUG(" ActivateDialog()\n");
+			ActivateDialog(((sDialogObject *)element->data)->dialog);
+		}
+	}
+	else
+	{
+		for (i = 1; i < dialogList->itemCount; i++)
+		{
+			element = (sElement *)element->next;
+
+			if (dialog == ((sDialogObject *)element->data)->dialog)
+			{
+				// void *selectedDialog = element->data;
+
+				DEBUG(" index %d\n");
+				free(element->data);
+				EraseIndex(dialogList, i);
+				// PushFront(dialogList, selectedDialog);
+
+				break;
+			}
+		}
+	}
+	 DEBUG("Done\n");
+	 DEBUG("DD::dialogs : %d\n", dialogList->itemCount);
 
 	DestroyList(dialog);
 }
 
 // --------------------------------------------------------------------------
 
-void RedrawElement(void *dialog, short id)
+void RedrawElement(void *dialog, short index)
 {
-	sList *dialogPtr = (sList *)dialog;
-	sElement *element;
-	sGraficObject *object;
+	sList		*dialogPtr = (sList *)dialog;
+	sElement		*element = (sElement *)dialogPtr->first;
+	sGraficObject	*object = (sGraficObject *)element->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 	
 	int i;
 
-	if (dialogPtr == 0)
-		return;
+	if (!dialogPtr) return;
+	if (dialogPtr->itemCount < index + 2) return;
 
-	if (dialogPtr->itemCount < id + 2)
-		return;
-
-	element = (sElement *)dialogPtr->first;
-	object = (sGraficObject *)element->data;
-
-	for (i = 0; i < id + 2; i++)
+	for (i = 0; i < index + 2; i++)
 	{
 		element = (void *)element->next;
 		object = element != 0 ? (sGraficObject *)element->data : 0;
@@ -1115,7 +1154,7 @@ void RedrawElement(void *dialog, short id)
 		case TA_EDIT_FIELD: // edit field
 			DrawEditField(dialog, object->coordinates, (int)object->info, object->string);
 
-			if (object == activatedObject)
+			if (object == topDialogObject->activatedObject)
 				ActivateEditField(dialogPtr, object);
 			
 			break;
@@ -1135,7 +1174,7 @@ void PaintGradient(short handle, sRect xy, short *rgbB, short *rgbE)
 	float	firstColour[3] = {rgbB[0], rgbB[1], rgbB[2]};
 	float	lastColour[3]  = {rgbE[0], rgbE[1], rgbE[2]};
 
-	if(vdi_inf[2] >= 16)
+	if(vdiInfo[2] >= 16)
 	{
 		int i;
 
@@ -1194,12 +1233,14 @@ void *FormSave(sRect *xy)
 
 	DEBUG("FormSave %d,%d,%d,%d\n", xy->x, xy->y, xy->w, xy->h);
 
+	memset(&Mpreserve, 0, sizeof(MFDB));
+
 	Mpreserve.fd_w = xy->w - xy->x + 1;
 	Mpreserve.fd_h = xy->h - xy->y + 1;
 	Mpreserve.fd_wdwidth = (Mpreserve.fd_w + 15) / 16;
 	Mpreserve.fd_stand = 0;
-	Mpreserve.fd_nplanes = vdi_inf[2];
-	Mpreserve.fd_addr = malloc((long)Mpreserve.fd_wdwidth * Mpreserve.fd_h * Mpreserve.fd_nplanes);
+	Mpreserve.fd_nplanes = vdiInfo[2];
+	Mpreserve.fd_addr = malloc((long)((Mpreserve.fd_wdwidth) * (Mpreserve.fd_h) * Mpreserve.fd_nplanes) * 2);
 
 	if (Mpreserve.fd_addr != NULL)
 	{
@@ -1227,10 +1268,11 @@ void FormRestore(sRect *xy, void *area)
 	Mpreserve.fd_w = xy->w - xy->x + 1;
 	Mpreserve.fd_h = xy->h - xy->y + 1;
 	Mpreserve.fd_wdwidth = (Mpreserve.fd_w + 15) / 16;
-	Mpreserve.fd_nplanes = vdi_inf[2];
+	Mpreserve.fd_nplanes = vdiInfo[2];
 	Mpreserve.fd_stand = 0;
 
-	if (Mpreserve.fd_addr != 0) {
+	if (Mpreserve.fd_addr != 0)
+	{
 		MFDB Mscreen = {0};
 		short pnt[8] = {0, 0, Mpreserve.fd_w - 1, Mpreserve.fd_h - 1,
 				xy->x, xy->y, xy->w, xy->h};
@@ -1261,6 +1303,9 @@ void FormCopy(sRect *from, sRect *to)
 
 int EventLoop()
 {
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
+
 	unsigned short previousMouseX      = 0;
 	unsigned short previousMouseY      = 0;
 	unsigned short previousMouseButton = 0;
@@ -1268,15 +1313,14 @@ int EventLoop()
 	short returnValue = 0;
 	long kbdDev;
 	
-	if (selectedWindow == 0)
-		return -1;
+	if (!selectedDialog) return -1;
 
 	kbdDev = open("u:\\dev\\console", O_DENYRW|O_RDONLY);
 	if (kbdDev < 0) return -1;
 
 	Vdi_mousex = Vdi_mousey = Vdi_mouseb = 0;
 
-	for(;;)
+	for ever
 	{
 #if !defined(MOUSE_USE_MOOSE)
 		// read and handle key event, when needed key press occures
@@ -1356,9 +1400,9 @@ int EventLoop()
 			previousMouseX = Vdi_mousex;
 			previousMouseY = Vdi_mousey;
 
-			if (selectedObject)
+			if (topDialogObject->selectedObject)
 			{
-				if (selectedObject->type == TA_MOVER)
+				if (topDialogObject->selectedObject->type == TA_MOVER)
 					HandleMouseMotion(motionX, motionY);
 			}
 		}
@@ -1415,38 +1459,40 @@ int EventLoop()
 
 short HandleMouse(short mouseX, short mouseY, short mouseButton)
 {
-	sElement *element = (sElement *)selectedWindow->first;
-	sGraficObject *object = (sGraficObject *)element->data;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement 		*element = (sElement *)selectedDialog->first;
+	sGraficObject	*object = (sGraficObject *)element->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 	
-	if (activatedObject)
+	if (topDialogObject->activatedObject)
 	{
-		if (activatedObject->type == TA_COMBO_BOX)
+		if (topDialogObject->activatedObject->type == TA_COMBO_BOX)
 		{
-			sList *menuPtr = (sList *)((sGraficObject *)activatedObject->string)->string;
+			sList *menuPtr = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
 
 			sRect menuRect;
 
-			menuRect.x = activatedObject->coordinates.x + object->coordinates.x;
-			menuRect.y = activatedObject->coordinates.h + object->coordinates.y + 1;
-			menuRect.w = activatedObject->coordinates.w + object->coordinates.x;
-			menuRect.h = activatedObject->coordinates.h + object->coordinates.y + 1 + (17 * (menuPtr->itemCount - 1));
+			menuRect.x = topDialogObject->activatedObject->coordinates.x + object->coordinates.x;
+			menuRect.y = topDialogObject->activatedObject->coordinates.h + object->coordinates.y + 1;
+			menuRect.w = topDialogObject->activatedObject->coordinates.w + object->coordinates.x;
+			menuRect.h = topDialogObject->activatedObject->coordinates.h + object->coordinates.y + 1 + (17 * (menuPtr->itemCount - 1));
 
 			if (mouseButton)
 			{
 				if (PtInRect(mouseX, mouseY, menuRect))
 				{
-					SetMenuSelect(activatedObject->string, ((mouseY - menuRect.y) / 17));
-					DrawComboBox(selectedWindow, activatedObject);
-					currentComboBoxValue = GetMenuSelect(activatedObject->string);
+					SetMenuSelect(topDialogObject->activatedObject->string, ((mouseY - menuRect.y) / 17));
+					DrawComboBox(selectedDialog, topDialogObject->activatedObject);
+					currentComboBoxValue = GetMenuSelect(topDialogObject->activatedObject->string);
 				}
 			}
 			else
 			{
-				if (selectedEditField)
-					ActivateEditField(selectedWindow, selectedEditField);
+				if (topDialogObject->selectedEditField)
+					ActivateEditField(selectedDialog, topDialogObject->selectedEditField);
 
 				else
-					ActivateEditField(selectedWindow, NULL);
+					ActivateEditField(selectedDialog, NULL);
 			}
 
 			return 0;
@@ -1463,12 +1509,14 @@ short HandleMouse(short mouseX, short mouseY, short mouseButton)
 
 void HandleMouseDown(short mouseX, short mouseY)
 {
-	sElement *element = (sElement *)selectedWindow->first;
-	sGraficObject *object = (sGraficObject *)element->data;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement		*element = (sElement *)selectedDialog->first;
+	sGraficObject	*object = (sGraficObject *)element->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 
 	short i;
 
-	for (i = 0; i < selectedWindow->itemCount; i++)
+	for (i = 0; i < selectedDialog->itemCount; i++)
 	{
 		if (object->type == TA_DIALOG)
 		{
@@ -1480,7 +1528,7 @@ void HandleMouseDown(short mouseX, short mouseY)
 		{
 			if (PtInRect(mouseX, mouseY, object->coordinates))
 			{
-				DrawButton(selectedWindow, object->coordinates, (int)object->info += BUTTON_SELECTED, object->string, object->type);
+				DrawButton(selectedDialog, object->coordinates, (int)object->info += BUTTON_SELECTED, object->string, object->type);
 
 				break;
 			}
@@ -1490,7 +1538,7 @@ void HandleMouseDown(short mouseX, short mouseY)
 		{
 			if (PtInRect(mouseX, mouseY, object->coordinates) && ((((int)object->info) >> 3) & 1) != 1)
 			{
-				DrawButton(selectedWindow, object->coordinates, (int)object->info += BUTTON_SELECTED, object->string, object->type);
+				DrawButton(selectedDialog, object->coordinates, (int)object->info += BUTTON_SELECTED, object->string, object->type);
 
 				break;
 			}
@@ -1501,7 +1549,7 @@ void HandleMouseDown(short mouseX, short mouseY)
 			if (PtInRect(mouseX, mouseY, object->coordinates) && (GetMenuFlag((void *)object->string) != COMBO_BOX_DISABLED))
 			{
 				SetMenuFlag(object->string, COMBO_BOX_SELECTED);
-				DrawComboBox(selectedWindow, object);
+				DrawComboBox(selectedDialog, object);
 
 				break;
 			}
@@ -1511,18 +1559,20 @@ void HandleMouseDown(short mouseX, short mouseY)
 		object = element != 0 ? (sGraficObject *)element->data : 0;
 	}
 
-	selectedObject = object;
+	topDialogObject->selectedObject = object;
 }
 
 short HandleMouseUp(short mouseX, short mouseY)
 {
-	sElement *element = (sElement *)selectedWindow->first;
-	sGraficObject *object = (sGraficObject *)element->data;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement		*element = (sElement *)selectedDialog->first;
+	sGraficObject	*object = (sGraficObject *)element->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 
 	short returnValue = 0;
 	short i;
 
-	for (i = 0; i < selectedWindow->itemCount; i++)
+	for (i = 0; i < selectedDialog->itemCount; i++)
 	{
 		switch (object->type)
 		{
@@ -1533,29 +1583,29 @@ short HandleMouseUp(short mouseX, short mouseY)
 				break;
 
 			case TA_BUTTON: // button
-				if (PtInRect(mouseX, mouseY, object->coordinates) && object == selectedObject && ((((int)object->info) >> 3) & 1) != 1)
+				if (PtInRect(mouseX, mouseY, object->coordinates) && object == topDialogObject->selectedObject && ((((int)object->info) >> 3) & 1) != 1)
 				{ 
 					returnValue = i;
-					i = selectedWindow->itemCount;
+					i = selectedDialog->itemCount;
 				}
 
 				break;
 
 			case TA_EDIT_FIELD: // edit field
 				if (PtInRect(mouseX, mouseY, object->coordinates))
-					ActivateEditField(selectedWindow, object);
+					ActivateEditField(selectedDialog, object);
 
 				break;
 
 			case TA_COMBO_BOX:
-				if (PtInRect(mouseX, mouseY, object->coordinates) && object == selectedObject && (GetMenuFlag((void *)object->string) != COMBO_BOX_DISABLED))
+				if (PtInRect(mouseX, mouseY, object->coordinates) && object == topDialogObject->selectedObject && (GetMenuFlag((void *)object->string) != COMBO_BOX_DISABLED))
 				{
-					if (((sGraficObject *)activatedObject)->type == TA_EDIT_FIELD)
-						selectedEditField = activatedObject;
+					if (topDialogObject->activatedObject->type == TA_EDIT_FIELD)
+						topDialogObject->selectedEditField = topDialogObject->activatedObject;
 					else
-						selectedEditField = NULL;
+						topDialogObject->selectedEditField = NULL;
 
-					ActivateEditField(selectedWindow, object);
+					ActivateEditField(selectedDialog, object);
 				}
 				break;
 		}	
@@ -1564,26 +1614,27 @@ short HandleMouseUp(short mouseX, short mouseY)
 		object = element != 0 ? (sGraficObject *)element->data : 0;
 	}
 
-	if (selectedObject)
+	if (topDialogObject->selectedObject)
 	{
-		if (selectedObject->type == TA_MOVER || selectedObject->type == TA_BUTTON)
+		if (topDialogObject->selectedObject->type == TA_MOVER || topDialogObject->selectedObject->type == TA_BUTTON)
 		{
-			DrawButton(selectedWindow, selectedObject->coordinates, (int)selectedObject->info -= BUTTON_SELECTED, selectedObject->string, selectedObject->type);
+			DrawButton(selectedDialog, topDialogObject->selectedObject->coordinates, (int)topDialogObject->selectedObject->info -= BUTTON_SELECTED, topDialogObject->selectedObject->string, topDialogObject->selectedObject->type);
 		}
-		else if (selectedObject->type == TA_COMBO_BOX && selectedObject != activatedObject)
+		else if (topDialogObject->selectedObject->type == TA_COMBO_BOX && topDialogObject->selectedObject != topDialogObject->activatedObject)
 		{
-			SetMenuFlag(selectedObject->string, COMBO_BOX_NORMAL);
-			DrawComboBox(selectedWindow, selectedObject);
+			SetMenuFlag(topDialogObject->selectedObject->string, COMBO_BOX_NORMAL);
+			DrawComboBox(selectedDialog, topDialogObject->selectedObject);
 		}
 	}
 
-	selectedObject = NULL;
+	topDialogObject->selectedObject = NULL;
 
 	return returnValue;
 }
 
 void  HandleMouseMotion(short motionX, short motionY)
 {
+	sList *selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
 /*	sRect xy;
 
 	xy.x = ((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.x;
@@ -1597,20 +1648,18 @@ void  HandleMouseMotion(short motionX, short motionY)
 		xy.y  = 0;
 	}
 */
-	// printf("mouse  x: %d, mouse  y: %d\n", Vdi_mousex, Vdi_mousey); 
-//	printf("motion x: %d, motion y: %d\n", Vdi_mousex - previousMouseX, Vdi_mousey - previousMouseY); 
-	FormRestore(&((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates, ((sGraficObject *)((sElement *)selectedWindow->first)->data)->info);
+	FormRestore(&((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates, ((sGraficObject *)((sElement *)selectedDialog->first)->data)->info);
 
-	if ((((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.x + motionX) < 0)
-		motionX += ((((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.x + motionX) * ( - 1));
+	if ((((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.x + motionX) < 0)
+		motionX += ((((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.x + motionX) * ( - 1));
 
-	if ((((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.y + motionY) < 0)
-		motionY += ((((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.y + motionY) * ( -1 ));
+	if ((((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.y + motionY) < 0)
+		motionY += ((((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.y + motionY) * ( -1 ));
 
-	((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.x += motionX;
-	((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.y += motionY;
-	((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.w += motionX;
-	((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.h += motionY;
+	((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.x += motionX;
+	((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.y += motionY;
+	((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.w += motionX;
+	((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates.h += motionY;
 /*
 	xy.x = ((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.x;
 	xy.w = ((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates.w;
@@ -1623,18 +1672,20 @@ void  HandleMouseMotion(short motionX, short motionY)
 		xy.y  = 0;
 	}
 */
-	((sGraficObject *)((sElement *)selectedWindow->first)->data)->info = FormSave(&((sGraficObject *)((sElement *)selectedWindow->first)->data)->coordinates);
-	DrawDialog(selectedWindow);
+	((sGraficObject *)((sElement *)selectedDialog->first)->data)->info = FormSave(&((sGraficObject *)((sElement *)selectedDialog->first)->data)->coordinates);
+	RedrawDialog(selectedDialog);
 }
 
 short HandleKeyboard(unsigned long keyPressed)
 {
-	sElement *element = (sElement *)selectedWindow->first;
-	sGraficObject *object = (sGraficObject *)element->data;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement		*element = (sElement *)selectedDialog->first;
+	sGraficObject	*object = (sGraficObject *)element->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 	
 	unsigned char asciiCode = keyPressed & 0xff;
 	unsigned char scanCode  = (keyPressed >> 16) & 0xff;
-	short bool = activatedObject != 0 ? activatedObject->type : 0;
+	short bool = topDialogObject->activatedObject != 0 ? topDialogObject->activatedObject->type : 0;
 
 	if (asciiCode == 27)
 	{
@@ -1643,15 +1694,14 @@ short HandleKeyboard(unsigned long keyPressed)
 	}
 	else if (asciiCode == 13 && bool != TA_COMBO_BOX)
 	{
-		short i;
-				
-		for (i = 0; i < selectedWindow->itemCount; i++)
+		int i;
+		for (i = 0; i < selectedDialog->itemCount; i++)
 		{
 			if (object->type == TA_BUTTON && (((int)(object->info)>>1)&1) == 1)
 			{
-				DrawButton(selectedWindow, object->coordinates, (int)object->info + BUTTON_SELECTED, object->string, object->type);
+				DrawButton(selectedDialog, object->coordinates, (int)object->info + BUTTON_SELECTED, object->string, object->type);
 				sleep(1);
-				DrawButton(selectedWindow, object->coordinates, (int)object->info, object->string, object->type);
+				DrawButton(selectedDialog, object->coordinates, (int)object->info, object->string, object->type);
 
 				return i;
 			}
@@ -1661,14 +1711,13 @@ short HandleKeyboard(unsigned long keyPressed)
 		}
 	}
 
-	if (activatedObject != 0)
+	if (topDialogObject->activatedObject != 0)
 	{
-		if (activatedObject->type == TA_EDIT_FIELD)
+		if (topDialogObject->activatedObject->type == TA_EDIT_FIELD)
 			HandleActivObject(asciiCode, scanCode);
 
-		else if (activatedObject->type == TA_COMBO_BOX)
+		else if (topDialogObject->activatedObject->type == TA_COMBO_BOX)
 			HandleMenu(asciiCode, scanCode);
-
 	}
 
 	return 0;
@@ -1676,37 +1725,47 @@ short HandleKeyboard(unsigned long keyPressed)
 
 void HandleActivObject(unsigned char asciiCode, unsigned char scanCode)
 {
-	sElement *element = (sElement *)selectedWindow->first;
-	sGraficObject *object = (sGraficObject *)element->data;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement		*element = (sElement *)selectedDialog->first;
+	sGraficObject	*object = (sGraficObject *)element->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 
 	if (asciiCode > 32 && asciiCode < 127)
 	{
 		char character[] = {asciiCode, 0};
 
-		if (strlen(activatedObject->string) < (int)activatedObject->info >> 16)
+		if (strlen(topDialogObject->activatedObject->string) < (int)topDialogObject->activatedObject->info >> 16)
 		{
-			DrawCursor(activatedObject->coordinates.x + object->coordinates.x + (strlen(activatedObject->string) * 8) + 2, activatedObject->coordinates.y + object->coordinates.y + 2, 0);
+			sRect textLoc = 
+			{
+				topDialogObject->activatedObject->coordinates.x + object->coordinates.x, 
+				topDialogObject->activatedObject->coordinates.y + object->coordinates.y,
+				topDialogObject->activatedObject->coordinates.w + object->coordinates.x,
+				topDialogObject->activatedObject->coordinates.h + object->coordinates.y
+			};
+
+			DrawCursor(topDialogObject->activatedObject->coordinates.x + object->coordinates.x + (strlen(topDialogObject->activatedObject->string) * 8) + 2, topDialogObject->activatedObject->coordinates.y + object->coordinates.y + 2, 0);
 
 			v_hide_c(handle);
 
-			if (((int)(activatedObject->info) & 1) == 1 )
-				v_gtext(handle, activatedObject->coordinates.x + object->coordinates.x + (strlen(activatedObject->string) * 8) + 2, activatedObject->coordinates.y + object->coordinates.y + 14, "*");
+			if (((int)(topDialogObject->activatedObject->info) & 1) == 1 )
+				v_gtext(handle, textLoc.x + ((strlen(topDialogObject->activatedObject->string)) * 8) + 2, textLoc.y + (((textLoc.h - textLoc.y) / 2) - 8) + 14, "*");
 			else
-				v_gtext(handle, activatedObject->coordinates.x + object->coordinates.x + (strlen(activatedObject->string) * 8) + 2, activatedObject->coordinates.y + object->coordinates.y + 14, &character[0]);
+				v_gtext(handle, textLoc.x + (strlen(topDialogObject->activatedObject->string) * 8) + 2, textLoc.y + (((textLoc.h - textLoc.y) / 2) - 8) + 14, &character[0]);
 			
 			v_show_c(handle, 0);
 
-			sprintf(&activatedObject->string[strlen(activatedObject->string)], "%c", asciiCode);
-			DrawCursor(activatedObject->coordinates.x + object->coordinates.x + (strlen(activatedObject->string) * 8) + 2, activatedObject->coordinates.y + object->coordinates.y + 2, 1);
+			sprintf(&topDialogObject->activatedObject->string[strlen(topDialogObject->activatedObject->string)], "%c", asciiCode);
+			DrawCursor(topDialogObject->activatedObject->coordinates.x + object->coordinates.x + (strlen(topDialogObject->activatedObject->string) * 8) + 2, topDialogObject->activatedObject->coordinates.y + object->coordinates.y + 2, 1);
 		}
 	}
-	else if (asciiCode == 8 && activatedObject != 0)
+	else if (asciiCode == 8 && topDialogObject->activatedObject != 0)
 	{
-		if (strlen(activatedObject->string) > 0)
+		if (strlen(topDialogObject->activatedObject->string) > 0)
 		{
-			DrawCursor(activatedObject->coordinates.x + object->coordinates.x + (strlen(activatedObject->string) * 8) + 2, activatedObject->coordinates.y + object->coordinates.y + 2, 0);
-			activatedObject->string[strlen(activatedObject->string) - 1] = 0;
-			DrawCursor(activatedObject->coordinates.x + object->coordinates.x + (strlen(activatedObject->string) * 8) + 2, activatedObject->coordinates.y + object->coordinates.y + 2, 1);
+			DrawCursor(topDialogObject->activatedObject->coordinates.x + object->coordinates.x + (strlen(topDialogObject->activatedObject->string) * 8) + 2, topDialogObject->activatedObject->coordinates.y + object->coordinates.y + 2, 0);
+			topDialogObject->activatedObject->string[strlen(topDialogObject->activatedObject->string) - 1] = 0;
+			DrawCursor(topDialogObject->activatedObject->coordinates.x + object->coordinates.x + (strlen(topDialogObject->activatedObject->string) * 8) + 2, topDialogObject->activatedObject->coordinates.y + object->coordinates.y + 2, 1);
 		}
 	}
 	else if (asciiCode == 9)
@@ -1725,56 +1784,61 @@ void HandleActivObject(unsigned char asciiCode, unsigned char scanCode)
 
 void HandleMenu(unsigned char asciiCode, unsigned char scanCode)
 {
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
+
 	if (asciiCode == 9)
 	{
-		SetMenuSelect(activatedObject->string, currentComboBoxValue);
+		SetMenuSelect(topDialogObject->activatedObject->string, currentComboBoxValue);
 			
 		SetActivNext(1);
 	}
 	else if (asciiCode == 13)
 	{
-		currentComboBoxValue = GetMenuSelect(activatedObject->string);
+		currentComboBoxValue = GetMenuSelect(topDialogObject->activatedObject->string);
 
-		if (selectedEditField)
-			ActivateEditField(selectedWindow, selectedEditField);
+		if (topDialogObject->selectedEditField)
+			ActivateEditField(selectedDialog, topDialogObject->selectedEditField);
 		else
-			ActivateEditField(selectedWindow, NULL);
+			ActivateEditField(selectedDialog, NULL);
 	}
 	else if (scanCode == 80)
 	{
-		sList *menu = (sList *)((sGraficObject *)activatedObject->string)->string;
+		sList *menu = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
 
-		int item = GetMenuSelect(activatedObject->string);
+		int item = GetMenuSelect(topDialogObject->activatedObject->string);
 	
 		if (++item >= (menu->itemCount - 1))
 			item = 0;
 
-		SetMenuSelect(activatedObject->string, item);
-		DrawComboBox(selectedWindow, activatedObject);
+		SetMenuSelect(topDialogObject->activatedObject->string, item);
+		DrawComboBox(selectedDialog, topDialogObject->activatedObject);
 	}
 	else if (scanCode == 72)
 	{
-		sList *menu = (sList *)((sGraficObject *)activatedObject->string)->string;
+		sList *menu = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
 
-		int item = GetMenuSelect(activatedObject->string);
+		int item = GetMenuSelect(topDialogObject->activatedObject->string);
 	
 		if (--item < 0)
 			item = (menu->itemCount - 2);
 			
-		SetMenuSelect(activatedObject->string, item);
-		DrawComboBox(selectedWindow, activatedObject);
+		SetMenuSelect(topDialogObject->activatedObject->string, item);
+		DrawComboBox(selectedDialog, topDialogObject->activatedObject);
 	}
 }
 
 void SetActivNext(short isTab)
 {
-	sElement *currentElement = (sElement *)selectedWindow->first;
-	sGraficObject *currentObject = (sGraficObject *)currentElement->data;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement		*currentElement = (sElement *)selectedDialog->first;
+	sGraficObject	*currentObject = (sGraficObject *)currentElement->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 
 	short i    = 0;
 	short bool = 0;
 
-	for (i = 0; i < selectedWindow->itemCount; i++)
+	for (i = 0; i < selectedDialog->itemCount; i++)
 	{
 		if (bool == 1)
 		{
@@ -1786,12 +1850,12 @@ void SetActivNext(short isTab)
 			{
 				if (GetMenuFlag((void *)currentObject->string) != COMBO_BOX_DISABLED)
 				{
-					selectedEditField = activatedObject;
+					topDialogObject->selectedEditField = topDialogObject->activatedObject;
 					break;
 				}
 			}
 		}
-		else if (currentObject == activatedObject)
+		else if (currentObject == topDialogObject->activatedObject)
 		{
 			bool = 1;
 		}
@@ -1799,32 +1863,34 @@ void SetActivNext(short isTab)
 		currentElement = (void *)currentElement->next;
 		currentObject  = currentElement != 0 ? (sGraficObject *)currentElement->data : 0;
 
-		if ((i + 1) == selectedWindow->itemCount)
+		if ((i + 1) == selectedDialog->itemCount)
 		{
 			i    = 0;
 			bool = 1;
 
-			currentElement = (sElement *)selectedWindow->first;
+			currentElement = (sElement *)selectedDialog->first;
 			currentObject  = (sGraficObject *)currentElement->data;
 		}
 	}
 
-	ActivateEditField(selectedWindow, currentObject);
+	ActivateEditField(selectedDialog, currentObject);
 }
 
 void SetActivPrev()
 {
-	sElement *currentElement = (sElement *)selectedWindow->first;
-	sGraficObject *currentObject = (sGraficObject *)currentElement->data;
-	sGraficObject *prevObject = NULL;
-	sGraficObject *lastObject = NULL;
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sElement 		*currentElement = (sElement *)selectedDialog->first;
+	sGraficObject	*currentObject = (sGraficObject *)currentElement->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
+	sGraficObject	*prevObject = NULL;
+	sGraficObject	*lastObject = NULL;
 
 	short position = -1;
 	short i;
 
-	for (i = 0; i < selectedWindow->itemCount; i++)
+	for (i = 0; i < selectedDialog->itemCount; i++)
 	{
-		if (currentObject == activatedObject)
+		if (currentObject == topDialogObject->activatedObject)
 			position = i;
 
 		else if (position < 0 && currentObject->type == TA_EDIT_FIELD)
@@ -1836,7 +1902,7 @@ void SetActivPrev()
 		currentElement = (void *)currentElement->next;
 		currentObject = currentElement != 0 ? (sGraficObject *)currentElement->data : 0;
 
-		if (selectedWindow->itemCount == (i + 1))
+		if (selectedDialog->itemCount == (i + 1))
 		{
 			if (prevObject != NULL)
 				currentObject = prevObject;
@@ -1848,5 +1914,5 @@ void SetActivPrev()
 		}
 	}
 
-	ActivateEditField(selectedWindow, currentObject);
+	ActivateEditField(selectedDialog, currentObject);
 }

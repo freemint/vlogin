@@ -1,7 +1,9 @@
 #ifndef __TINY_AES_H__
 #define __TINY_AES_H__
 
+
 #include "types.h"
+#include "list.h"
 
 
 #define TA_DIALOG			100
@@ -28,6 +30,7 @@
 #define COMBO_BOX_ACTIVATED	2
 #define COMBO_BOX_DISABLED	4
 
+
 typedef struct
 {	
 	short type;
@@ -36,12 +39,20 @@ typedef struct
 	char *string;
 } sGraficObject;
 
+typedef struct
+{
+	sList *dialog;
+	sGraficObject *selectedEditField;
+	sGraficObject *selectedObject;
+	sGraficObject *activatedObject;
+} sDialogObject;
+
 
 // graf handle fo current vdi vorkstation
 short handle;
 
 // x, y dimensions of screen, current bpp
-short vdi_inf[3];
+short vdiInfo[3];
 
 
 // entry, exit functins of TAES
@@ -77,5 +88,7 @@ void SetMenuFlag(void *menu, int flag);
 short GetMenuFlag(void *menu);
 
 void AttachMenuItem(void *menu, void *item);
+
+#define ever (;;)
 
 #endif
