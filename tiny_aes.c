@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <fcntl.h>
 #include <memory.h>
 #include <gem.h>
@@ -52,11 +53,16 @@ void  FormCopy(sRect *from, sRect *to);
 // event handling functions
 int   EventLoop();
 
+// mouse
 short HandleMouse(short mouseX, short mouseY, short mouseButton);
-void  HandleMouseDown(short mouseX, short mouseY);
+short HandleMouseDown(short mouseX, short mouseY);
 short HandleMouseUp(short mouseX, short mouseY);
+
+void  HandleMouseInMenu(short mouseX, short mouseY, short mouseButton);
+
 void  HandleMouseMotion(short motionX, short motionY);
 
+// keyboard
 short HandleKeyboard(unsigned long keyPressed);
 void  HandleActivObject(unsigned char asciiCode, unsigned char scanCode);
 void  HandleMenu(unsigned char asciiCode, unsigned char scanCode);
@@ -251,51 +257,171 @@ void ExitTinyAES()
 
 short AlertDialog(char *stringOne, char *stringTwo, char *buttonOneString, char *buttonTwoString)
 {
-	sRect windowPositon 	= {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
-	sRect buttonOnePosition 	= {62, 98, 122, 118};
-	sRect buttonTwoPosition 	= {138, 98, 198, 118};
-	sRect boxPosition 		= {16, 35, 244, 86};
-	sRect stringOnePositon 	= {24, 56, 0, 0};
-	sRect stringTwoPositon 	= {24, 76, 0, 0};
+	sRect windowPositon = {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
+	sRect buttonPosition = {0, 58, 0, 78};
+	sRect boxPosition = {16, 35, 0, 0};
+	sRect stringPositon = {24, 56, 0, 0};
+	
+	sList *dialog;
+	sList *tokens;
 
-	sList *dialogPtr = (sList *)CreateDialog(windowPositon, "Alert");
+	sElement *element;
 
-	short returnValue = -1;
+	char  *string;
+	char  *token;
 
-	AttachBox(dialogPtr, boxPosition, NULL);
-	AttachString(dialogPtr, stringOnePositon, stringOne);
-	AttachString(dialogPtr, stringTwoPositon, stringTwo);
-	AttachButton(dialogPtr, buttonOnePosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonOneString);
-	AttachButton(dialogPtr, buttonTwoPosition, BUTTON_CENTER, buttonTwoString);
+	short returnValue	=-1;
 
-	DrawDialog(dialogPtr);
+	int itemCount		= 2;
+	int lineCount		= 0;
+	int maxLineWidth	= 0;
+	int maxButtonWidth	= 0;
+
+	string = malloc(strlen(stringTwo) + 1);
+	strcpy(string, stringTwo);
+
+	tokens = CreateList();
+	token  = strtok(string, "\n");
+
+	for (lineCount = 0; token; lineCount++)
+	{
+		int currentLineWidth = strlen(token);
+
+		if (maxLineWidth < currentLineWidth)
+			maxLineWidth = currentLineWidth;
+
+		PushBack(tokens, token);
+
+		token = strtok(0, "\n");
+	}
+
+	maxButtonWidth = strlen(buttonOneString) > strlen(buttonTwoString) ? strlen(buttonOneString) : strlen(buttonTwoString);
+	maxButtonWidth = (maxButtonWidth * 8) + 24;
+
+	maxLineWidth = maxLineWidth * 8;
+
+	windowPositon.x = (vdiInfo[0] - (maxLineWidth + 48)) / 2;
+	windowPositon.w = (vdiInfo[0] + (maxLineWidth + 48)) / 2;
+	windowPositon.y = (vdiInfo[1] - ((lineCount * 20) + 90)) / 2;
+	windowPositon.h = (vdiInfo[1] + ((lineCount * 20) + 90)) / 2;
+
+	dialog = (sList *)CreateDialog(windowPositon, stringOne);
+
+	boxPosition.w = boxPosition.x + maxLineWidth + 16;
+	boxPosition.h = boxPosition.y + (lineCount * 20) + 12;
+
+	AttachBox(dialog, boxPosition, NULL);
+
+	for (element = (sElement *)tokens->first; element; element = (sElement *)tokens->first)
+	{
+		itemCount++;
+
+		AttachString(dialog, stringPositon, (char *)element->data);
+		stringPositon.y += 20;
+
+		EraseFront(tokens);
+	}
+
+	DestroyList(tokens);
+
+	free(string);
+
+	buttonPosition.y += (lineCount * 20);
+	buttonPosition.h += (lineCount * 20);
+
+	buttonPosition.x = ((maxLineWidth + 48) - (maxButtonWidth * 2)) / 3;
+	buttonPosition.w = buttonPosition.x + maxButtonWidth;
+
+	AttachButton(dialog, buttonPosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonOneString);
+
+	buttonPosition.x = buttonPosition.w + (((maxLineWidth + 48) - (maxButtonWidth * 2)) / 3);
+	buttonPosition.w = buttonPosition.x + maxButtonWidth;
+
+	AttachButton(dialog, buttonPosition, BUTTON_CENTER, buttonTwoString);
+
+	DrawDialog(dialog);
 
 	returnValue = EventLoop();
-	DisposeDialog(dialogPtr);
 
-	return returnValue == 5 ? 1: 0;
+	DisposeDialog(dialog);
+
+	return returnValue - itemCount;
 }
 
 short InfoDialog(char *stringOne, char *stringTwo, char *buttonString)
 {
 	sRect windowPositon = {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
-	sRect buttonPosition = {100, 98, 160, 118};
-	sRect boxPosition = {16, 35, 244, 86};
-	sRect stringOnePositon = {24, 56, 0, 0};
-	sRect stringTwoPositon = {24, 76, 0, 0};
+	sRect buttonPosition = {0, 58, ((strlen(buttonString) * 8) + 24), 78};
+	sRect boxPosition = {16, 35, 0, 0};
+	sRect stringPositon = {24, 56, 0, 0};
 	
-	sList *dialogPtr = (sList *)CreateDialog(windowPositon, "Info");
+	sList *dialog;
+	sList *tokens;
 
-	AttachBox(dialogPtr, boxPosition, NULL);
-	AttachString(dialogPtr, stringOnePositon, stringOne);
-	AttachString(dialogPtr, stringTwoPositon, stringTwo);
-	AttachButton(dialogPtr, buttonPosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonString);
+	sElement *element;
 
-	DrawDialog(dialogPtr);
+	char  *string;
+	char  *token;
+
+	int lineCount		= 0;
+	int maxLineWidth	= 0;
+
+	string = malloc(strlen(stringTwo) + 1);
+	strcpy(string, stringTwo);
+
+	tokens = CreateList();
+	token  = strtok(string, "\n");
+
+	for (lineCount = 0; token; lineCount++)
+	{
+		int currentLineWidth = strlen(token);
+
+		if (maxLineWidth < currentLineWidth)
+			maxLineWidth = currentLineWidth;
+
+		PushBack(tokens, token);
+
+		token = strtok(0, "\n");
+	}
+
+	maxLineWidth = maxLineWidth * 8;
+
+	windowPositon.x = (vdiInfo[0] - (maxLineWidth + 48)) / 2;
+	windowPositon.w = (vdiInfo[0] + (maxLineWidth + 48)) / 2;
+	windowPositon.y = (vdiInfo[1] - ((lineCount * 20) + 90)) / 2;
+	windowPositon.h = (vdiInfo[1] + ((lineCount * 20) + 90)) / 2;
+
+	dialog = (sList *)CreateDialog(windowPositon, stringOne);
+
+	boxPosition.w = boxPosition.x + maxLineWidth + 16;
+	boxPosition.h = boxPosition.y + (lineCount * 20) + 12;
+
+	AttachBox(dialog, boxPosition, NULL);
+
+	for (element = (sElement *)tokens->first; element; element = (sElement *)tokens->first)
+	{
+		AttachString(dialog, stringPositon, (char *)element->data);
+		stringPositon.y += 20;
+
+		EraseFront(tokens);
+	}
+
+	DestroyList(tokens);
+
+	free(string);
+
+	buttonPosition.x = ((maxLineWidth + 48) - buttonPosition.w) / 2;
+	buttonPosition.w = ((maxLineWidth + 48) + buttonPosition.w) / 2;
+	buttonPosition.y += (lineCount * 20);
+	buttonPosition.h += (lineCount * 20);
+
+	AttachButton(dialog, buttonPosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonString);
+
+	DrawDialog(dialog);
 
 	EventLoop();
 
-	DisposeDialog(dialogPtr);
+	DisposeDialog(dialog);
 
 	return 1;
 }
@@ -763,10 +889,11 @@ void DrawComboBox(void *dialog, void *comboBox)
 	sList		*menuPtr = (sList *)menuObject->string;
 	sElement		*element = (sElement *)((sList *)dialog)->first;
 	sGraficObject	*dialogObject = (sGraficObject *)element->data;
+
 	sRect		boxCoordinates = {((sGraficObject *)comboBox)->coordinates.x, ((sGraficObject *)comboBox)->coordinates.y, ((sGraficObject *)comboBox)->coordinates.w, ((sGraficObject *)comboBox)->coordinates.h};
 	sRect 		buttonRect = {((sGraficObject *)comboBox)->coordinates.w - 19, ((sGraficObject *)comboBox)->coordinates.y + 1, ((sGraficObject *)comboBox)->coordinates.w - 1, ((sGraficObject *)comboBox)->coordinates.h - 1};
+
 	short 		xy[4];
-	int			i;
 
 	xy[0] = boxCoordinates.x += dialogObject->coordinates.x;
 	xy[1] = boxCoordinates.y += dialogObject->coordinates.y;
@@ -784,20 +911,20 @@ void DrawComboBox(void *dialog, void *comboBox)
 	{
 		char	*string;
 		int  maxStringLen;
+		int  i;
+
 		element = (sElement *)menuPtr->first;
 
 		for (i = 0; i <= GetMenuSelect(((sGraficObject *)comboBox)->string); i++)
 			element = (void *)element->next;
 
-		string = malloc(strlen(element->data));		
+		string = malloc(strlen(element->data) + 1);		
 		strcpy(string, element->data);
 
 		maxStringLen = ((xy[2] - xy[0]) - 20) / 8;
 
 		if (strlen(string) > maxStringLen)
 		{
-			int i;
-
 			string[maxStringLen] = 0;
 
 			for (i = 1; i < 4; i++)
@@ -868,7 +995,7 @@ void DrawMenu(void *menu, sRect menuRect, short item)
 
 	for (i = 0; i < menuPtr->itemCount - 1; i++)
 	{
-		char	*string = malloc(strlen(menuElement->data));
+		char	*string = malloc(strlen(menuElement->data) + 1);
 		strcpy(string, menuElement->data);
 
 		vswr_mode(handle, MD_TRANS);
@@ -878,7 +1005,10 @@ void DrawMenu(void *menu, sRect menuRect, short item)
 
 			vsl_color(handle, colors[3]);
 			v_pline(handle, 2, line);
-			line[1]++; line[3]++;
+
+			line[1]++;
+			line[3]++;
+
 			vsl_color(handle, colors[2]);
 			v_pline(handle, 2, line);
 		}
@@ -1126,13 +1256,9 @@ void DisposeDialog(void *dialog)
 
 			if (dialog == ((sDialogObject *)element->data)->dialog)
 			{
-				// void *selectedDialog = element->data;
-
 				DEBUG(" index %d\n");
 				free(element->data);
 				EraseIndex(dialogList, i);
-				// PushFront(dialogList, selectedDialog);
-
 				break;
 			}
 		}
@@ -1403,10 +1529,13 @@ int EventLoop()
 			tv.tv_usec=0;
 
 			// check whether there are some mouse events
-                	if (select(mouseHandle+1,&rdfds,NULL,NULL,&tv)) {
+               if (select(mouseHandle+1,&rdfds,NULL,NULL,&tv))
+			{
 				char buffer[3];
-				/* Read new mouse info */
-				if (read(mouseHandle, buffer, 3)>0) {
+
+				// Read new mouse info
+				if (read(mouseHandle, buffer, 3)>0)
+				{
 					Vdi_mouseb = buffer[0];
 					Vdi_mousex += (short) ((char) buffer[1]);
 					Vdi_mousey += (short) ((char) buffer[2]);
@@ -1485,55 +1614,24 @@ int EventLoop()
 
 short HandleMouse(short mouseX, short mouseY, short mouseButton)
 {
-	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
-	sElement 		*element = (sElement *)selectedDialog->first;
-	sGraficObject	*object = (sGraficObject *)element->data;
 	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 	
+	// if there is activated object of type TA_COMBO_BOX
+	// call menu handling function and return 0 (no button was selected)
 	if (topDialogObject->activatedObject)
 	{
 		if (topDialogObject->activatedObject->type == TA_COMBO_BOX)
 		{
-			sList *menuPtr = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
-
-			sRect menuRect;
-
-			menuRect.x = topDialogObject->activatedObject->coordinates.x + object->coordinates.x;
-			menuRect.y = topDialogObject->activatedObject->coordinates.h + object->coordinates.y + 1;
-			menuRect.w = topDialogObject->activatedObject->coordinates.w + object->coordinates.x;
-			menuRect.h = topDialogObject->activatedObject->coordinates.h + object->coordinates.y + 1 + (17 * (menuPtr->itemCount - 1));
-
-			if (mouseButton)
-			{
-				if (PtInRect(mouseX, mouseY, menuRect))
-				{
-					SetMenuSelect(topDialogObject->activatedObject->string, ((mouseY - menuRect.y) / 17));
-					DrawComboBox(selectedDialog, topDialogObject->activatedObject);
-					currentComboBoxValue = GetMenuSelect(topDialogObject->activatedObject->string);
-				}
-			}
-			else
-			{
-				if (topDialogObject->selectedEditField)
-					ActivateEditField(selectedDialog, topDialogObject->selectedEditField);
-
-				else
-					ActivateEditField(selectedDialog, NULL);
-			}
-
+			HandleMouseInMenu(mouseX, mouseY, mouseButton);
 			return 0;
 		}
 	}
 
-	if (mouseButton)
-		HandleMouseDown(mouseX, mouseY);
-	else
-		return HandleMouseUp(mouseX, mouseY);
-
-	return 0;
+	// menu isn't opened, handle mouse in dialog elements
+	return mouseButton ? HandleMouseDown(mouseX, mouseY): HandleMouseUp(mouseX, mouseY);
 }
 
-void HandleMouseDown(short mouseX, short mouseY)
+short HandleMouseDown(short mouseX, short mouseY)
 {
 	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
 	sElement		*element = (sElement *)selectedDialog->first;
@@ -1546,8 +1644,8 @@ void HandleMouseDown(short mouseX, short mouseY)
 	{
 		if (object->type == TA_DIALOG)
 		{
-			mouseX-= object->coordinates.x;
-			mouseY-= object->coordinates.y;
+				mouseX-= object->coordinates.x;
+				mouseY-= object->coordinates.y;
 		}
 
 		if (object->type == TA_MOVER)
@@ -1570,6 +1668,7 @@ void HandleMouseDown(short mouseX, short mouseY)
 			}
 		}
 
+
 		if (object->type == TA_COMBO_BOX)
 		{
 			if (PtInRect(mouseX, mouseY, object->coordinates) && (GetMenuFlag((void *)object->string) != COMBO_BOX_DISABLED))
@@ -1579,13 +1678,15 @@ void HandleMouseDown(short mouseX, short mouseY)
 
 				break;
 			}
-		}	
+		}
 
 		element = (void *)element->next;
 		object = element != 0 ? (sGraficObject *)element->data : 0;
 	}
 
 	topDialogObject->selectedObject = object;
+
+	return 0;
 }
 
 short HandleMouseUp(short mouseX, short mouseY)
@@ -1619,7 +1720,10 @@ short HandleMouseUp(short mouseX, short mouseY)
 
 			case TA_EDIT_FIELD: // edit field
 				if (PtInRect(mouseX, mouseY, object->coordinates))
+				{
 					ActivateEditField(selectedDialog, object);
+					i = selectedDialog->itemCount;
+				}
 
 				break;
 
@@ -1632,7 +1736,9 @@ short HandleMouseUp(short mouseX, short mouseY)
 						topDialogObject->selectedEditField = NULL;
 
 					ActivateEditField(selectedDialog, object);
+					i = selectedDialog->itemCount;
 				}
+
 				break;
 		}	
 
@@ -1658,7 +1764,60 @@ short HandleMouseUp(short mouseX, short mouseY)
 	return returnValue;
 }
 
-void  HandleMouseMotion(short motionX, short motionY)
+void HandleMouseInMenu(short mouseX, short mouseY, short mouseButton)
+{
+	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
+	sGraficObject	*object = (sGraficObject *)((sElement *)selectedDialog->first)->data;
+	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
+
+	sList 		*menuPtr = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
+	sElement		*element = (sElement *)menuPtr->first;
+
+	sRect 		menuRect;
+
+	short		menuSelect;
+	short		i;
+
+	char			*string;
+
+	menuRect.x = topDialogObject->activatedObject->coordinates.x + object->coordinates.x;
+	menuRect.y = topDialogObject->activatedObject->coordinates.h + object->coordinates.y + 1;
+	menuRect.w = topDialogObject->activatedObject->coordinates.w + object->coordinates.x;
+	menuRect.h = topDialogObject->activatedObject->coordinates.h + object->coordinates.y + 1 + (17 * (menuPtr->itemCount - 1));
+
+	menuSelect = ((mouseY - menuRect.y) / 17);
+
+	element = (sElement *)menuPtr->first;
+
+	for (i = 0; i <= menuSelect; i++)
+		element = (void *)element->next;
+
+	string = (char *)(element->data);
+
+	if (string && string[0] == '-')
+		return;
+
+	if (mouseButton)
+	{
+		if (PtInRect(mouseX, mouseY, menuRect))
+		{
+			SetMenuSelect(topDialogObject->activatedObject->string, menuSelect);
+			DrawComboBox(selectedDialog, topDialogObject->activatedObject);
+			currentComboBoxValue = GetMenuSelect(topDialogObject->activatedObject->string);
+		}
+	}
+	else
+	{
+		if (topDialogObject->selectedEditField)
+			ActivateEditField(selectedDialog, topDialogObject->selectedEditField);
+
+		else
+			ActivateEditField(selectedDialog, NULL);
+
+	}
+}
+
+void HandleMouseMotion(short motionX, short motionY)
 {
 	sList *selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
 /*	sRect xy;
@@ -1813,6 +1972,12 @@ void HandleMenu(unsigned char asciiCode, unsigned char scanCode)
 	sList		*selectedDialog = ((sDialogObject *)((sElement *)dialogList->first)->data)->dialog;
 	sDialogObject	*topDialogObject = (sDialogObject *)((sElement *)dialogList->first)->data;
 
+	sList		*menu = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
+	sElement		*element;
+	char			*string;
+
+	int 			item = GetMenuSelect(topDialogObject->activatedObject->string);
+
 	if (asciiCode == 9)
 	{
 		SetMenuSelect(topDialogObject->activatedObject->string, currentComboBoxValue);
@@ -1830,27 +1995,63 @@ void HandleMenu(unsigned char asciiCode, unsigned char scanCode)
 	}
 	else if (scanCode == 80)
 	{
-		sList *menu = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
-
-		int item = GetMenuSelect(topDialogObject->activatedObject->string);
+		int i;
 	
-		if (++item >= (menu->itemCount - 1))
-			item = 0;
+		for (i = 0; i < menu->itemCount - 1; i++)
+		{
+			int i;
 
-		SetMenuSelect(topDialogObject->activatedObject->string, item);
-		DrawComboBox(selectedDialog, topDialogObject->activatedObject);
+			if (++item >= (menu->itemCount - 1))
+				item = 0;
+
+			element = (sElement *)menu->first;
+
+			for (i = 0; i <= item; i++)
+				element = (void *)element->next;
+
+			string = (char *)(element->data);
+
+			if (string && string[0] != '-')
+			{
+				if (item != GetMenuSelect(topDialogObject->activatedObject->string))
+				{
+					SetMenuSelect(topDialogObject->activatedObject->string, item);
+					DrawComboBox(selectedDialog, topDialogObject->activatedObject);
+				}
+
+				break;
+			}
+		}
 	}
 	else if (scanCode == 72)
 	{
-		sList *menu = (sList *)((sGraficObject *)topDialogObject->activatedObject->string)->string;
-
-		int item = GetMenuSelect(topDialogObject->activatedObject->string);
+		int i;
 	
-		if (--item < 0)
-			item = (menu->itemCount - 2);
+		for (i = 0; i < menu->itemCount - 1; i++)
+		{
+			int i;
+
+			if (--item < 0)
+				item = (menu->itemCount - 2);
 			
-		SetMenuSelect(topDialogObject->activatedObject->string, item);
-		DrawComboBox(selectedDialog, topDialogObject->activatedObject);
+			element = (sElement *)menu->first;
+
+			for (i = 0; i <= item; i++)
+				element = (void *)element->next;
+
+			string = (char *)(element->data);
+
+			if (string && string[0] != '-')
+			{
+				if (item != GetMenuSelect(topDialogObject->activatedObject->string))
+				{
+					SetMenuSelect(topDialogObject->activatedObject->string, item);
+					DrawComboBox(selectedDialog, topDialogObject->activatedObject);
+				}
+
+				break;
+			}
+		}
 	}
 }
 
