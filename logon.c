@@ -1,6 +1,3 @@
-#include "config.h"
-#include "environment.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,6 +10,12 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <string.h>
+
+#include <mint/ssystem.h>
+#include <mint/mintbind.h>
+
+#include "config.h"
+#include "environment.h"
 
 #include "limits.h"
 #include "vdi_login.h"
@@ -99,11 +102,11 @@ static char **GetNewEnv (struct passwd *user)
 	int i;
 	char **ne;
 
-	ne = (char **)malloc( sizeof(char *) * (__NUM_VARIABLES__));
+	ne = (char **)malloc(sizeof(char *) * (__NUM_VARIABLES__));
 	if (ne == NULL)
 		return ne;
 
-	for (i = 0;i<__NUM_VARIABLES__;i++)
+	for (i = 0;i < __NUM_VARIABLES__;i++)
 	{
 		ne[i] = (char *)malloc(sizeof(char) * (__MAX_STR_LEN__));
 		
@@ -119,7 +122,7 @@ static char **GetNewEnv (struct passwd *user)
 	sprintf(ne[i++], "SHELL=%s", user->pw_shell);
 	sprintf(ne[i++], "USER=%s", user->pw_name);
 	sprintf(ne[i++], "LOGNAME=%s", user->pw_name);
-	sprintf(ne[i++], "TERM=%s", getenv("TERM")?getenv("TERM"):"linux");
+	sprintf(ne[i++], "TERM=%s", getenv("TERM") ? getenv("TERM") : "vt52");
 
 	if (GetSetPathEnv())
 	{
@@ -172,7 +175,6 @@ static int WriteLastLogEntry(uid_t user_uid, char *rmthost, struct lastlog *oldl
 	// close file
 	close (lastlogFile);
 
-	// all is groovy
 	return 0;
 }
 
@@ -183,9 +185,6 @@ int Logon(struct passwd *user, char *rmthost, int preserve)
 	struct lastlog oldlog;
 	char * line;
 	int i = 0;
-	int rc;
-
-	printf("Logon\n");
 
 	CheckUtmp(strcmp(user->pw_name,"root"));
 
@@ -199,77 +198,33 @@ int Logon(struct passwd *user, char *rmthost, int preserve)
 		free(line);
 	}
 
-	// Get user's environment, and should that fail, default to
-	// the emergency environment.
+	// get user's environment, if it fail, 
+	// use the emergency environment.
 	if ((newEnvironment = GetNewEnv(user)) == NULL)
 		newEnvironment = emergency_env;
    
 	// cd to user's home
 	chdir(user->pw_dir);
 
-	// Change permissions to terminal
+	// change permissions to terminal
 	grp = getgrnam("tty");
 	chown(ttyname(0), user->pw_uid, grp->gr_gid);
 	chmod(ttyname(0), 0620);
 
 	WriteLastLogEntry(user->pw_uid, rmthost?rmthost:"", &oldlog);
 
-	// execute user's shell
-	rc = fork();
-
-	if (rc == 0)
-	{
-		char *loginShell;
-    
-		// Change to user's uid and gid
-		setgid(user->pw_gid);
-		initgroups(user->pw_name, user->pw_gid);
-		setuid(user->pw_uid);
+	// change to user's uid and gid
+	setgid(user->pw_gid);
+	initgroups(user->pw_name, user->pw_gid);
+	setuid(user->pw_uid);
   
-		AfterLogin(user->pw_uid, rmthost?rmthost:"", &oldlog);
+	AfterLogin(user->pw_uid, rmthost ? rmthost :"", &oldlog);
 
-		// Execute the user's shell
-		loginShell = malloc(strlen(user->pw_shell)+2);
+	while (newEnvironment[i] != NULL)
+		putenv(newEnvironment[i++]);
 
-		if (loginShell == NULL)
-		{
-/*			log_message(49998,"Error: virtual memory exhausted! "
-						"Can't execute shell!\n");
-*/			_exit(1);
-		}
-
-		strcpy(loginShell,"-");
-		strcat(loginShell,user->pw_shell);
-
-		if (!(preserve))
-		{
-			execle(shell->command, loginShell, NULL, newEnvironment);
-			// execle(user->pw_shell, loginShell, NULL, new_environment);
-		}
-		else
-		{
-			while (newEnvironment[i] != NULL)
-				putenv(newEnvironment[i++]);
-
-			execl(shell->command, loginShell, NULL);
-			// execl(user->pw_shell, loginShell, NULL);
-		}
-	}
-	else
-	{
-		if (rc == -1)
-		{
-			char errormessage[__MAX_STR_LEN__];
-
-			sprintf(errormessage,"couldn't fork off process for user-environment!");
-//			log_message(1, errormessage);
-			return -1;
-		}
-		else
-		{
-			wait(&i);
-		}
-	}
+	// execute user's shell
+	execl(shell->command, shell->command, NULL);
 
 	return 0;
 }
