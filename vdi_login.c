@@ -54,7 +54,7 @@ int main()
 	InitTinyAES();
 	 DEBUG("Ok\n");
 
-	// InfoDialog("Test of new multiline dialog", "Three rings for the Elven-kings under the sky,\nSeven for the Dwarf-lords in their halls of stone,\nNine for Mortal Men doomed to die,\nOne for the Dark Lord on his dark throne\nIn the Land of Mordor where the Shadows lie.", "Wow, that's good");
+	// AlertDialog("Test of new multiline dialog", "Three rings for the Elven-kings under the sky,\nSeven for the Dwarf-lords in their halls of stone,\nNine for Mortal Men doomed to die,\nOne for the Dark Lord on his dark throne\nIn the Land of Mordor where the Shadows lie.", "Wow that's good", "Desive dlouhej text v tlacitku", 0);
 
 	 DEBUG("Creating menu\n");
 	menuPtr = BuildMenu();
@@ -112,7 +112,7 @@ void *BuildMenu()
 		 DEBUG("Invalid vlogin.conf dialog: ");
 
 		// if there is no valid command in vlogin.conf
-		InfoDialog("Alert", "File '/etc/vlogin.conf'\nis missing or invalid!\n \nusing '/bin/sh'", "Ops");
+		AlertDialog("Alert", "File '/etc/vlogin.conf'\nis missing or invalid!\n \nusing '/bin/sh'", "Ops", 0);
 		 DEBUG("Ok\n");
 	}
 
@@ -224,7 +224,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			else
 			{
 			 DEBUG("Verify FAIL\n");
-				InfoDialog("Alert", "User name or password you\ntyped was incorrect!", "Ops");
+				AlertDialog("Alert", "User name or password you\ntyped was incorrect!", "Ops", 0);
 		
 			 DEBUG("Verify INFO\n");
 				password[0] = 0;
@@ -253,7 +253,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			break;
 
 		case 9:
-			if (1 == AlertDialog("Alert", "Do you realy want to\nREBOOT?", "Yes", "No"))
+			if (1 == AlertDialog("Alert", "Do you realy want to\nREBOOT?", "Yes", "No", 0))
 			{
 	 			#ifdef DEBUG
 				 ExitDebug();
@@ -271,7 +271,7 @@ void HandleLoginDialog(void *dialogPtr, void *menuPtr)
 			break;
 
 		case 10:
-			if (1 == AlertDialog("Alert", "Do you realy want to\nSHUTDOWN?", "Yes", "No"))
+			if (1 == AlertDialog("Alert", "Do you realy want to\nSHUTDOWN?", "Yes", "No", 0))
 			{
 	 			#ifdef DEBUG
 				 ExitDebug();
