@@ -59,8 +59,7 @@ short vdiInfo[3];
 void InitTinyAES();
 void ExitTinyAES();
 
-short InfoDialog(char *infoStringOne, char *infoStringTwo, char *buttonString);
-short AlertDialog(char *alertStringOne, char *alertStringTwo, char *buttonOneString, char *buttonTwoString);
+short AlertDialog(char *title, char *message, char *button, ...);
 
 void *CreateDialog(sRect dial_xy, char *label);
 void DrawDialog(void *dialog);

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <fcntl.h>
 #include <memory.h>
@@ -255,89 +256,101 @@ void ExitTinyAES()
 
 // ---------------------------------------------------------------------------
 
-short AlertDialog(char *stringOne, char *stringTwo, char *buttonOneString, char *buttonTwoString)
+short AlertDialog(char *title, char *message, char *button, ...)
 {
-	sRect windowPositon = {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
+	sRect windowPositon;
 	sRect buttonPosition = {0, 58, 0, 78};
-	sRect boxPosition = {16, 35, 0, 0};
-	sRect stringPositon = {24, 56, 0, 0};
+	sRect boxPosition    = {16, 35, 0, 0};
+	sRect stringPositon  = {24, 56, 0, 0};
 	
 	sList *dialog;
-	sList *tokens;
 
-	sElement *element;
+	va_list marker;
 
-	char  *string;
 	char  *token;
+	char  *string;
 
 	short returnValue	=-1;
+	short buttonCount	= 0;
+	short index;
 
 	int itemCount		= 2;
-	int lineCount		= 0;
+	int lineCount		= 1;
 	int maxLineWidth	= 0;
+	int curLineWidth	= 0;
 	int maxButtonWidth	= 0;
 
-	string = malloc(strlen(stringTwo) + 1);
-	strcpy(string, stringTwo);
+	va_start(marker, button);
 
-	tokens = CreateList();
-	token  = strtok(string, "\n");
-
-	for (lineCount = 0; token; lineCount++)
+	for (string = button; string; string = va_arg(marker, char *))
 	{
-		int currentLineWidth = strlen(token);
-
-		if (maxLineWidth < currentLineWidth)
-			maxLineWidth = currentLineWidth;
-
-		PushBack(tokens, token);
-
-		token = strtok(0, "\n");
+		buttonCount ++;
+		maxButtonWidth = strlen(string) > maxButtonWidth ? strlen(string) : maxButtonWidth;
 	}
 
-	maxButtonWidth = strlen(buttonOneString) > strlen(buttonTwoString) ? strlen(buttonOneString) : strlen(buttonTwoString);
-	maxButtonWidth = (maxButtonWidth * 8) + 24;
+	va_end(marker);
+
+	string = malloc(strlen(message) + 1);
+	strcpy(string, message);
+
+	for (index = 0; string[index]; index++)
+	{
+		curLineWidth ++;
+		
+		if (string[index] == '\n')
+		{
+			if (maxLineWidth < curLineWidth)
+				maxLineWidth = curLineWidth;
+
+			curLineWidth = 0;
+			lineCount ++;
+		}
+	}
 
 	maxLineWidth = maxLineWidth * 8;
+
+	maxButtonWidth = ((maxButtonWidth * 8) + 24);
+	if ((maxButtonWidth * buttonCount) > maxLineWidth)
+		maxButtonWidth = maxLineWidth / buttonCount;
 
 	windowPositon.x = (vdiInfo[0] - (maxLineWidth + 48)) / 2;
 	windowPositon.w = (vdiInfo[0] + (maxLineWidth + 48)) / 2;
 	windowPositon.y = (vdiInfo[1] - ((lineCount * 20) + 90)) / 2;
 	windowPositon.h = (vdiInfo[1] + ((lineCount * 20) + 90)) / 2;
 
-	dialog = (sList *)CreateDialog(windowPositon, stringOne);
+	dialog = (sList *)CreateDialog(windowPositon, title);
 
 	boxPosition.w = boxPosition.x + maxLineWidth + 16;
 	boxPosition.h = boxPosition.y + (lineCount * 20) + 12;
 
 	AttachBox(dialog, boxPosition, NULL);
 
-	for (element = (sElement *)tokens->first; element; element = (sElement *)tokens->first)
+	for (token  = strtok(string, "\n"); token; token = strtok(0, "\n"))
 	{
 		itemCount++;
 
-		AttachString(dialog, stringPositon, (char *)element->data);
+		AttachString(dialog, stringPositon, token);
 		stringPositon.y += 20;
-
-		EraseFront(tokens);
 	}
-
-	DestroyList(tokens);
 
 	free(string);
 
 	buttonPosition.y += (lineCount * 20);
 	buttonPosition.h += (lineCount * 20);
 
-	buttonPosition.x = ((maxLineWidth + 48) - (maxButtonWidth * 2)) / 3;
-	buttonPosition.w = buttonPosition.x + maxButtonWidth;
+	va_start(marker, button);
 
-	AttachButton(dialog, buttonPosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonOneString);
+	string = button;
 
-	buttonPosition.x = buttonPosition.w + (((maxLineWidth + 48) - (maxButtonWidth * 2)) / 3);
-	buttonPosition.w = buttonPosition.x + maxButtonWidth;
+	for (index = 0; index < buttonCount; index++, string = va_arg(marker, char *))
+	{
+		buttonPosition.x = buttonPosition.w + (((maxLineWidth + 48) - (maxButtonWidth * buttonCount)) / (buttonCount +1));
+		buttonPosition.w = buttonPosition.x + maxButtonWidth;
 
-	AttachButton(dialog, buttonPosition, BUTTON_CENTER, buttonTwoString);
+		AttachButton(dialog, buttonPosition, BUTTON_CENTER + (!index ? BUTTON_DEFAULT : 0), string);
+	}
+
+	va_end(marker);
 
 	DrawDialog(dialog);
 
@@ -346,84 +359,6 @@ short AlertDialog(char *stringOne, char *stringTwo, char *buttonOneString, char 
 	DisposeDialog(dialog);
 
 	return returnValue - itemCount;
-}
-
-short InfoDialog(char *stringOne, char *stringTwo, char *buttonString)
-{
-	sRect windowPositon = {vdiInfo[0] / 2 - 130, vdiInfo[1] / 2 - 65, vdiInfo[0] / 2 + 130, vdiInfo[1] / 2 + 65};
-	sRect buttonPosition = {0, 58, ((strlen(buttonString) * 8) + 24), 78};
-	sRect boxPosition = {16, 35, 0, 0};
-	sRect stringPositon = {24, 56, 0, 0};
-	
-	sList *dialog;
-	sList *tokens;
-
-	sElement *element;
-
-	char  *string;
-	char  *token;
-
-	int lineCount		= 0;
-	int maxLineWidth	= 0;
-
-	string = malloc(strlen(stringTwo) + 1);
-	strcpy(string, stringTwo);
-
-	tokens = CreateList();
-	token  = strtok(string, "\n");
-
-	for (lineCount = 0; token; lineCount++)
-	{
-		int currentLineWidth = strlen(token);
-
-		if (maxLineWidth < currentLineWidth)
-			maxLineWidth = currentLineWidth;
-
-		PushBack(tokens, token);
-
-		token = strtok(0, "\n");
-	}
-
-	maxLineWidth = maxLineWidth * 8;
-
-	windowPositon.x = (vdiInfo[0] - (maxLineWidth + 48)) / 2;
-	windowPositon.w = (vdiInfo[0] + (maxLineWidth + 48)) / 2;
-	windowPositon.y = (vdiInfo[1] - ((lineCount * 20) + 90)) / 2;
-	windowPositon.h = (vdiInfo[1] + ((lineCount * 20) + 90)) / 2;
-
-	dialog = (sList *)CreateDialog(windowPositon, stringOne);
-
-	boxPosition.w = boxPosition.x + maxLineWidth + 16;
-	boxPosition.h = boxPosition.y + (lineCount * 20) + 12;
-
-	AttachBox(dialog, boxPosition, NULL);
-
-	for (element = (sElement *)tokens->first; element; element = (sElement *)tokens->first)
-	{
-		AttachString(dialog, stringPositon, (char *)element->data);
-		stringPositon.y += 20;
-
-		EraseFront(tokens);
-	}
-
-	DestroyList(tokens);
-
-	free(string);
-
-	buttonPosition.x = ((maxLineWidth + 48) - buttonPosition.w) / 2;
-	buttonPosition.w = ((maxLineWidth + 48) + buttonPosition.w) / 2;
-	buttonPosition.y += (lineCount * 20);
-	buttonPosition.h += (lineCount * 20);
-
-	AttachButton(dialog, buttonPosition, BUTTON_CENTER + BUTTON_DEFAULT, buttonString);
-
-	DrawDialog(dialog);
-
-	EventLoop();
-
-	DisposeDialog(dialog);
-
-	return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -733,9 +668,12 @@ void DrawButton(void *dialogPtr, sRect button_xy, int flag, char *label, int typ
 	sList		*list = (sList *)dialogPtr;
 	sGraficObject	*object;
 
+	char *string;
+
 	short rgbB[3];
 	short rgbE[3];
 
+	short maxStringLen = 0;
 	short labelLength = strlen(label);
 
 	element = (sElement *)list->first;
@@ -799,23 +737,45 @@ void DrawButton(void *dialogPtr, sRect button_xy, int flag, char *label, int typ
 	if (((dialogPtr != selectedDialog) && (type == TA_MOVER)) || (((flag >> 3) & 1) == 1))
 		vst_color(handle, colors[3]);
 
+	maxStringLen = ((button_xy.w - button_xy.x) - 8) / 8;
+
+	string = malloc(labelLength + 1);		
+	strcpy(string, label);
+
+	if (labelLength > maxStringLen)
+	{
+		string[maxStringLen] = 0;
+
+		if (maxStringLen > 5)
+		{
+			int i;
+
+			for (i = 1; i < 4; i++)
+				string[maxStringLen - i] = '.';
+		}
+
+		labelLength = maxStringLen;
+	}
+
 	if (labelLength != 0)
 	{
 		if ((flag & 1) == 1 )
 		{
 			if (((flag >> 2) & 1) != 1 )
-				v_gtext(handle, button_xy.x + ((button_xy.w - button_xy.x) / 2) - (labelLength * 4), button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 14, label);
+				v_gtext(handle, button_xy.x + ((button_xy.w - button_xy.x) / 2) - (labelLength * 4), button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 14, string);
 			else
-				v_gtext(handle, button_xy.x + ((button_xy.w - button_xy.x) / 2) - (labelLength * 4) + 1, button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 15, label);
+				v_gtext(handle, button_xy.x + ((button_xy.w - button_xy.x) / 2) - (labelLength * 4) + 1, button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 15, string);
 		}
 		else
 		{
 			if (((flag >> 2) & 1) != 1 )
-				v_gtext(handle, button_xy.x + 8, button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 14, label);
+				v_gtext(handle, button_xy.x + 8, button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 14, string);
 			else
-				v_gtext(handle, button_xy.x + 9, button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 15, label);
+				v_gtext(handle, button_xy.x + 9, button_xy.y + (((button_xy.h - button_xy.y) / 2) - 8) + 15, string);
 		}
 	}
+
+	free(string);
 
 	vswr_mode( handle, MD_REPLACE);
 	vst_color(handle, colors[5]);
