@@ -33,3 +33,6 @@ You can use any char in label or path string but for spaces, in that case
 string must be within quotes!
 Passing commad line parameters is currently unsupportd, so don't use 
 something like "xaaes -fvideo 26" 
+
+vlogin can be started from mint.cnf but respawning is not working then!
+Do not quit AES/shell when running vlogin from mint.cnf!
