@@ -765,7 +765,6 @@ void DrawComboBox(void *dialog, void *comboBox)
 	sGraficObject	*dialogObject = (sGraficObject *)element->data;
 	sRect		boxCoordinates = {((sGraficObject *)comboBox)->coordinates.x, ((sGraficObject *)comboBox)->coordinates.y, ((sGraficObject *)comboBox)->coordinates.w, ((sGraficObject *)comboBox)->coordinates.h};
 	sRect 		buttonRect = {((sGraficObject *)comboBox)->coordinates.w - 19, ((sGraficObject *)comboBox)->coordinates.y + 1, ((sGraficObject *)comboBox)->coordinates.w - 1, ((sGraficObject *)comboBox)->coordinates.h - 1};
-	char			*string;
 	short 		xy[4];
 	int			i;
 
@@ -783,14 +782,31 @@ void DrawComboBox(void *dialog, void *comboBox)
 
 	if (menuPtr)
 	{
+		char	*string;
+		int  maxStringLen;
 		element = (sElement *)menuPtr->first;
 
 		for (i = 0; i <= GetMenuSelect(((sGraficObject *)comboBox)->string); i++)
 			element = (void *)element->next;
 
-		string = element != 0 ? (char *)element->data : 0;
+		string = malloc(strlen(element->data));		
+		strcpy(string, element->data);
+
+		maxStringLen = ((xy[2] - xy[0]) - 20) / 8;
+
+		if (strlen(string) > maxStringLen)
+		{
+			int i;
+
+			string[maxStringLen] = 0;
+
+			for (i = 1; i < 4; i++)
+				string[maxStringLen - i] = '.';
+		}
 
 		v_gtext(handle, xy[0] + 2, xy[1] + (((xy[3] - xy[1]) / 2) - 8) + 14, string);
+
+		free(string);
 	}
 
 	switch (GetMenuFlag(((sGraficObject *)comboBox)->string))
@@ -835,12 +851,9 @@ void DrawMenu(void *menu, sRect menuRect, short item)
 	sList *menuPtr = (sList *)menu;
 	sElement *menuElement = (sElement *)menuPtr->first;
 	
-	char *string;
-	
-	int i;
-
 	short rgbB[3];
 	short rgbE[3];
+	int i;
 
 	v_hide_c(handle);
 
@@ -852,10 +865,12 @@ void DrawMenu(void *menu, sRect menuRect, short item)
 	DrawShades(&menuRect, 1, 0);
 
 	menuElement = (void *)menuElement->next;
-	string = (char *)menuElement->data;
 
 	for (i = 0; i < menuPtr->itemCount - 1; i++)
 	{
+		char	*string = malloc(strlen(menuElement->data));
+		strcpy(string, menuElement->data);
+
 		vswr_mode(handle, MD_TRANS);
 		if (string && string[0] == '-')
 		{
@@ -869,8 +884,23 @@ void DrawMenu(void *menu, sRect menuRect, short item)
 		}
 		else
 		{
+			int  maxStringLen = ((menuRect.w - menuRect.x) - 4) / 8;
+
+			if (strlen(string) > maxStringLen)
+			{
+				int i;
+
+				string[maxStringLen] = 0;
+
+				for (i = 1; i < 4; i++)
+					string[maxStringLen - i] = '.';
+			}
+
 			v_gtext(handle, menuRect.x + 5, (menuRect.y + 14) + (i * 17), string);
+
 		}
+
+		free(string);
 
 		if (item == i)
 		{
@@ -884,11 +914,7 @@ void DrawMenu(void *menu, sRect menuRect, short item)
 
 		vswr_mode(handle, MD_REPLACE);
 
-		if (menuElement->next)
-		{
-			menuElement = (void *)menuElement->next;
-			string = menuElement != 0 ? (char *)menuElement->data : 0;
-		}
+		menuElement = (void *)menuElement->next;
 	}
 
 	v_show_c(handle, 0);
