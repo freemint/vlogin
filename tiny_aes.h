@@ -26,6 +26,7 @@
 #define COMBO_BOX_NORMAL		0
 #define COMBO_BOX_SELECTED	1
 #define COMBO_BOX_ACTIVATED	2
+#define COMBO_BOX_DISABLED	4
 
 typedef struct
 {	
@@ -64,13 +65,16 @@ void AttachButton(void *dialogPtr, sRect button_xy, int flag, char *label);
 void AttachBox(void *dialogPtr, sRect string_xy, char *label);
 void AttachString(void *dialogPtr, sRect string_xy, char *label);
 void AttachEditField(void *dialogPtr, sRect box_xy, int flag, int size, char *label);
-void AttachComboBox(void *dialogPtr, sRect box_xy, void *menu);
+void AttachComboBox(void *dialogPtr, sRect box_xy, int flag, void *menu);
 
 void *CreateMenu();
 void DisposeMenu(void *menu);
 
 void SetMenuSelect(void *menu, short item);
 short GetMenuSelect(void *menu);
+
+void SetMenuFlag(void *menu, int flag);
+short GetMenuFlag(void *menu);
 
 void AttachMenuItem(void *menu, void *item);
 
