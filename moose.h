@@ -1,4 +1,4 @@
-#include "../mint/freemint/sys/xdd/whlmoose/whlmoose.h"
+#include "../freemint/sys/xdd/whlmoose/whlmoose.h"
 
 extern int mouseDevHandle;
 
