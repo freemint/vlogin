@@ -9,12 +9,11 @@ CFLAGS += -ggdb -O0 -Wall
 OBJS = tiny_aes.o vdi_login.o list.o signals.o verify.o md5crypt.o logon.o\
 conf.o after_login.o vdi_it.o moose.o debug.o
 
-# LFLAGS = -L./libfsa/ -lfsa -L./imglib/ -lximg -lwindom -lgem
 LFLAGS = -lgem
 
 EXEC_SUFIX = .prg
 
-TARGET = vlogin$(EXEC_SUFIX)
+# TARGET = vlogin$(EXEC_SUFIX)
 TARGET = vlogin
 
 all: $(TARGET)
