@@ -1,14 +1,13 @@
-* Merge Info/Alert/Dialog() functions
 * Finish img loading and create support for img buttons in tiny_aes
 * Support for bitmap as a background (jpeg/bmp/tiff)
 * Allow passing more info to TinyAES
   - sizes and colours of widgets
-  - whatever use gradients (when aplicable)
-  - style of background color, pattern, gradient, image  
-* Make moving with dialog smarter
+  - whatever to use gradients (when aplicable)
+  - style of background: solid color, pattern, gradient, image  
+* Make moving with dialogs smarter
 * Do configurable background in vlogin.conf
 * Somehow allow to specify which shells/aeses can be used by which users 
-
+* Redirect output from console to console window
 
 Make it smaller/faster/smarter
 :o)
